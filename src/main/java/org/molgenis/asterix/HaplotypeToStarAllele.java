@@ -1,5 +1,8 @@
 package org.molgenis.asterix;
 
+import org.molgenis.asterix.org.molgenis.asterix.config.ConfigConstants;
+import org.molgenis.asterix.org.molgenis.asterix.config.ConfigProvider;
+
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -15,14 +18,34 @@ public class HaplotypeToStarAllele {
 //    private static final String SNP_HAPLO_TABLE_DIR = "/groups/ll-geno/tmp04/ll-ov18-0434/data/translation_tables/snp_to_haplo/";
 //    private static final String HAPLOTYPE_DIR = "/groups/ll-geno/tmp04/ll-ov18-0434/data/phased_genotypes/";
 
-    private static final String STAR_ALLELE_OUTPUT_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/star_alleles/";
-    private static final String SNP_HAPLO_TABLE_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/snp_to_haplo/";
-    private static final String HAPLOTYPE_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/ll_phased_active/";
+    //output dir staralleles of every individual
+    //private static final String STAR_ALLELE_OUTPUT_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/star_alleles/";
+    //private static final String STAR_ALLELE_OUTPUT_DIR = "C:\\molgenis\\asterix_data\\star_alleles\\";
+    private static String STAR_ALLELE_OUTPUT_DIR;
+    //input dir conversion/mapping table snps to haplotypes
+    //private static final String SNP_HAPLO_TABLE_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/snp_to_haplo/";
+    //private static final String SNP_HAPLO_TABLE_DIR = "C:\\molgenis\\asterix_data\\snp_to_haplo\\";
+    private static String SNP_HAPLO_TABLE_DIR;
 
+    //genotype data, .haps file that needs to be converted
+    //private static final String HAPLOTYPE_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/ll_phased_active/";
+    //private static final String HAPLOTYPE_DIR = "C:\\molgenis\\asterix_data\\ll_phased_active\\";
+    private static String HAPLOTYPE_DIR;
+
+    private ConfigProvider configProvider = null;
+
+    //gene as values, gene identifiers as keys
     private SortedMap<String, PgxGene> genes;
+
+    //samples as values, sample identifiers as keys
     private Map<String, Sample> samples;
 
+
+
     public HaplotypeToStarAllele() throws IOException {
+        //set config
+        this.loadConfig();
+
         HaploTableReader haploTableReader = new HaploTableReader(SNP_HAPLO_TABLE_DIR);
         haploTableReader.readSnpHaploTables();
         this.genes = haploTableReader.getGenes();
@@ -119,5 +142,16 @@ public class HaplotypeToStarAllele {
         return samples;
     }
 
+    /**
+     * load the configuration
+     */
+    private void loadConfig(){
+        //set config provider
+        this.configProvider = ConfigProvider.getInstance();
+        //load dirs
+        STAR_ALLELE_OUTPUT_DIR = this.configProvider.getConfigParam(ConfigConstants.STAR_ALLELE_OUTPUT_DIR);
+        SNP_HAPLO_TABLE_DIR = this.configProvider.getConfigParam(ConfigConstants.SNP_HAPLO_TABLE_DIR);
+        HAPLOTYPE_DIR = this.configProvider.getConfigParam(ConfigConstants.HAPLOTYPE_DIR);
+    }
 
 }
