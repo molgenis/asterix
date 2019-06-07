@@ -17,6 +17,8 @@ public class StarAlleleToPhenotype {
     //private static final String PREDICTED_PHENOTYPES_OUTPUT_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/predicted_phenotypes/";
     //private static final String PREDICTED_PHENOTYPES_OUTPUT_DIR = "C:\\molgenis\\asterix_data\\predicted_phenotypes\\";
     private static String PREDICTED_PHENOTYPES_OUTPUT_DIR;
+    //output file for sample matrix
+    private static String SAMPLE_MATRIX_OUT;
 
     private ConfigProvider configProvider = null;
 
@@ -34,6 +36,7 @@ public class StarAlleleToPhenotype {
         //load dirs
         CONVERSION_TABLE_DIR = this.configProvider.getConfigParam(ConfigConstants.HAPLO_PHENO_TABLE_DIR);
         PREDICTED_PHENOTYPES_OUTPUT_DIR = this.configProvider.getConfigParam(ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR);
+        SAMPLE_MATRIX_OUT = this.configProvider.getConfigParam(ConfigConstants.SAMPLE_MATRIX_OUT);
     }
 
     private void readConversionTables() throws IOException {
@@ -142,7 +145,8 @@ public class StarAlleleToPhenotype {
         new File(PREDICTED_PHENOTYPES_OUTPUT_DIR).mkdirs();
 
         //File sampleMatrixFile = new File("/Users/harmbrugge/Documents/PGx/data/richtlijn/sample_matrix.csv");
-        File sampleMatrixFile = new File("C:\\molgenis\\asterix_data\\sample_matrix.csv");
+        //File sampleMatrixFile = new File("C:\\molgenis\\asterix_data\\sample_matrix.csv");
+        File sampleMatrixFile = new File(SAMPLE_MATRIX_OUT);
         FileWriter fileWriter0 = new FileWriter(sampleMatrixFile.getAbsoluteFile());
         BufferedWriter bw0 = new BufferedWriter(fileWriter0);
 

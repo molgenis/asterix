@@ -65,6 +65,7 @@ public class ConfigProvider {
         this.possibleCliArguments.add(ConfigConstants.OPTION_HAPLOTYPE_DIR);
         this.possibleCliArguments.add(ConfigConstants.OPTION_HAPLO_PHENO_TABLE_DIR);
         this.possibleCliArguments.add(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR);
+        this.possibleCliArguments.add(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT);
     }
 
     /**
@@ -76,6 +77,7 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_HAPLO_PHENO_TABLE_DIR, true, "the directory of the tables to map the haplotypes to phenotypes");
         this.options.addOption(ConfigConstants.OPTION_HAPLOTYPE_DIR, true, "the directory of the haplotypes to parse");
         this.options.addOption(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, true, "the directory where the predicted phenotypes are written");
+        this.options.addOption(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, true, "the output file for the sample matrix (comma separated file)");
         //the help option
         this.options.addOption(ConfigConstants.OPTION_HELP, false, "print the help");
     }
@@ -89,6 +91,7 @@ public class ConfigProvider {
         this.cliOptionToName.put(ConfigConstants.OPTION_HAPLO_PHENO_TABLE_DIR, ConfigConstants.HAPLO_PHENO_TABLE_DIR);
         this.cliOptionToName.put(ConfigConstants.OPTION_HAPLOTYPE_DIR, ConfigConstants.HAPLOTYPE_DIR);
         this.cliOptionToName.put(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR);
+        this.cliOptionToName.put(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, ConfigConstants.SAMPLE_MATRIX_OUT);
     }
 
     /**
@@ -100,6 +103,7 @@ public class ConfigProvider {
         this.storedConfig.put(ConfigConstants.HAPLOTYPE_DIR, ConfigConstants.DEFAULT_HAPLOTYPE_DIR);
         this.storedConfig.put(ConfigConstants.HAPLO_PHENO_TABLE_DIR, ConfigConstants.DEFAULT_HAPLO_PHENO_TABLE_DIR);
         this.storedConfig.put(ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR, ConfigConstants.DEFAULT_PREDICTED_PHENOTYPES_OUTPUT_DIR);
+        this.storedConfig.put(ConfigConstants.SAMPLE_MATRIX_OUT, ConfigConstants.DEFAULT_SAMPLE_MATRIX_OUT);
     }
 
     /**

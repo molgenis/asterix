@@ -32,6 +32,11 @@ public class ConfigConstants {
     protected static final String OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR = "pheno_out_dir";
     protected static final String DEFAULT_PREDICTED_PHENOTYPES_OUTPUT_DIR = "predicted_phenotypes/";
 
+    //output file for sample matrix
+    public static final String SAMPLE_MATRIX_OUT = "SAMPLE_MATRIX_OUT";
+    protected static final String OPTION_SAMPLE_MATRIX_OUT = "sample_matrix_out";
+    protected static final String DEFAULT_SAMPLE_MATRIX_OUT = "sample_matrix.csv";
+
     //help string cli
     protected static final String OPTION_HELP = "help";
 
