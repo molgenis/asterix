@@ -1,4 +1,4 @@
-package org.molgenis.asterix.org.molgenis.asterix.config;
+package org.molgenis.asterix.config;
 
 /**
  * @author OelenR

@@ -1,8 +1,8 @@
 package org.molgenis.asterix;
 
 import org.apache.commons.io.filefilter.WildcardFileFilter;
-import org.molgenis.asterix.org.molgenis.asterix.config.ConfigConstants;
-import org.molgenis.asterix.org.molgenis.asterix.config.ConfigProvider;
+import org.molgenis.asterix.config.ConfigConstants;
+import org.molgenis.asterix.config.ConfigProvider;
 
 import java.io.*;
 import java.util.*;
