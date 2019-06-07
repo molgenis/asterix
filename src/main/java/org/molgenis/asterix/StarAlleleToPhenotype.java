@@ -1,10 +1,8 @@
 package org.molgenis.asterix;
 
-import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.molgenis.asterix.org.molgenis.asterix.config.ConfigConstants;
 import org.molgenis.asterix.org.molgenis.asterix.config.ConfigProvider;
-import sun.security.krb5.Config;
 
 import java.io.*;
 import java.util.*;

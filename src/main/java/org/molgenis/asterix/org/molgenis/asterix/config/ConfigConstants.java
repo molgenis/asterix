@@ -32,6 +32,9 @@ public class ConfigConstants {
     protected static final String OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR = "pheno_out_dir";
     protected static final String DEFAULT_PREDICTED_PHENOTYPES_OUTPUT_DIR = "predicted_phenotypes/";
 
+    //help string cli
+    protected static final String OPTION_HELP = "help";
+
     //private constructor so Object cannot be created
     private ConfigConstants(){
 

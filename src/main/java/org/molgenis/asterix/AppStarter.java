@@ -19,33 +19,32 @@ public class AppStarter {
         app.start(args);
     }
 
+    /*
+    example args:
+    java -jar asterix.jar -star_out C:\\molgenis\\asterix_data\\star_alleles\\ -snp_haplo_table_dir C:\\molgenis\\asterix_data\\snp_to_haplo\\ -haplo_type_dir C:\\molgenis\\asterix_data\\ll_phased_active\\ -haplo_pheno_table_dir C:\\molgenis\\asterix_data\\haplo_to_pheno\\ -pheno_out_dir C:\\molgenis\\asterix_data\\predicted_phenotypes\\
+     */
+
     /**
      * start the application
      * @param args the command line arguments
      */
     public void start(String[] args){
-        //load config
-        this.loadCliArgs(args);
-        //do the actual work
         try {
-            StarAlleleToPhenotype.run();
+            //load config
+            ConfigProvider configProvider = ConfigProvider.getInstance();
+            configProvider.loadCliArguments(args);
+            //check for help request by user
+            if(!configProvider.isRequestedHelp()){
+                //do the actual work
+                StarAlleleToPhenotype.run();
+            }
         }
         catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    /**
-     * load the command line arguments
-     * @param args the command line arguments
-     */
-    private void loadCliArgs(String[] args){
-        try {
-            ConfigProvider configProvider = ConfigProvider.getInstance();
-            configProvider.loadCliArguments(args);
-        }
-        catch (ParseException e) {
+        catch(ParseException e){
             e.printStackTrace();
         }
     }
+
 }

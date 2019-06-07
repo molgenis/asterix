@@ -15,16 +15,20 @@ public class ConfigProvider {
     this class implements the singleton pattern
      */
 
-    //loaded and default properties for configuration
-    private Properties storedConfig = null;
     //parser for CLI arguments
     private CommandLineParser parser = null;
+    //formatter for help argument
+    private HelpFormatter helpFormatter = null;
+    //loaded and default properties for configuration
+    private Properties storedConfig = null;
     //values to check for CLI args
     private List<String> possibleCliArguments = null;
     //mapping of cli argument to option name
     private Map<String, String> cliOptionToName;
     //options that are possible
     private Options options = null;
+    //whether the user requested help
+    private boolean requestedHelp = false;
 
 
     //self reference
@@ -34,6 +38,7 @@ public class ConfigProvider {
     private ConfigProvider(){
         this.storedConfig = new Properties();
         this.parser = new DefaultParser();
+        this.helpFormatter = new HelpFormatter();
         this.possibleCliArguments = new ArrayList<>();
         this.cliOptionToName = new HashMap<>();
         this.options = new Options();
@@ -71,6 +76,8 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_HAPLO_PHENO_TABLE_DIR, true, "the directory of the tables to map the haplotypes to phenotypes");
         this.options.addOption(ConfigConstants.OPTION_HAPLOTYPE_DIR, true, "the directory of the haplotypes to parse");
         this.options.addOption(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, true, "the directory where the predicted phenotypes are written");
+        //the help option
+        this.options.addOption(ConfigConstants.OPTION_HELP, false, "print the help");
     }
 
     /**
@@ -104,6 +111,12 @@ public class ConfigProvider {
         if(null != args && args.length>0){
             //parse options
             CommandLine cmd = parser.parse( options, args);
+            //check if the user asked for help
+            if(cmd.hasOption(ConfigConstants.OPTION_HELP)){
+                this.requestedHelp = true;
+                //help is printed and set here, it is up to the Object using this Provider to determine if it wants to continue on
+                this.printHelp();
+            }
             //if properties are available, overwrite the defaults
             for(String option : this.possibleCliArguments){
                 if(cmd.hasOption(option)){
@@ -138,6 +151,21 @@ public class ConfigProvider {
      */
     public String getConfigParam(String paramName){
         return this.storedConfig.getProperty(paramName);
+    }
+
+    /**
+     * print the help/manual
+     */
+    public void printHelp(){
+        this.helpFormatter.printHelp("asterix", this.options);
+    }
+
+    /**
+     * get wether the user requested the help
+     * @return whether the user requested the help
+     */
+    public boolean isRequestedHelp(){
+        return this.requestedHelp;
     }
 
 }
