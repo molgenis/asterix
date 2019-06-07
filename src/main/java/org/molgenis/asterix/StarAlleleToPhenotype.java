@@ -1,24 +1,49 @@
 package org.molgenis.asterix;
 
 import org.apache.commons.io.filefilter.WildcardFileFilter;
+import org.molgenis.asterix.config.ConfigConstants;
+import org.molgenis.asterix.config.ConfigProvider;
 
 import java.io.*;
 import java.util.*;
 
 public class StarAlleleToPhenotype {
 
-    private static final String CONVERSION_TABLE_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/haplo_to_pheno/";
-    private static final String PREDICTED_PHENOTYPES_OUTPUT_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/predicted_phenotypes/";
+    //input dir for converting haplotype to phenotype (star alleles to functions)
+    //private static final String HAPLO_PHENO_TABLE_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/haplo_to_pheno/";
+    //private static final String CONVERSION_TABLE_DIR = "C:\\molgenis\\asterix_data\\haplo_to_pheno\\";
+    private static String CONVERSION_TABLE_DIR;
+    //output dir for converted haplotypes to predicted functions (per gene as file, with rows as persons)
+    //private static final String PREDICTED_PHENOTYPES_OUTPUT_DIR = "/Users/harmbrugge/Documents/PGx/data/richtlijn/predicted_phenotypes/";
+    //private static final String PREDICTED_PHENOTYPES_OUTPUT_DIR = "C:\\molgenis\\asterix_data\\predicted_phenotypes\\";
+    private static String PREDICTED_PHENOTYPES_OUTPUT_DIR;
+    //output file for sample matrix
+    private static String SAMPLE_MATRIX_OUT;
+
+    private ConfigProvider configProvider = null;
+
 
     private SortedMap<String, PgxGene> genes;
 
+    /**
+     *
+     * @param genes
+     */
     public StarAlleleToPhenotype(SortedMap<String, PgxGene> genes) {
         this.genes = genes;
+        //set config provider
+        this.configProvider = ConfigProvider.getInstance();
+        //load dirs
+        CONVERSION_TABLE_DIR = this.configProvider.getConfigParam(ConfigConstants.HAPLO_PHENO_TABLE_DIR);
+        PREDICTED_PHENOTYPES_OUTPUT_DIR = this.configProvider.getConfigParam(ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR);
+        SAMPLE_MATRIX_OUT = this.configProvider.getConfigParam(ConfigConstants.SAMPLE_MATRIX_OUT);
     }
 
     private void readConversionTables() throws IOException {
 
+        //list of files used as input to map staralles to function
         File[] alleleFunctionTables = new File(CONVERSION_TABLE_DIR).listFiles((FileFilter) new WildcardFileFilter("*alleles.txt"));
+        //list of files of functions to predicted phenotypes
         File[] phenotypeTables = new File(CONVERSION_TABLE_DIR).listFiles((FileFilter) new WildcardFileFilter("*phenotype.txt"));
 
         for (File alleleFunctionTable : alleleFunctionTables) {
@@ -82,11 +107,14 @@ public class StarAlleleToPhenotype {
 
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void run() throws IOException {
+
+        //haplotype to start allele
         HaplotypeToStarAllele haplotypeToStarAllele = new HaplotypeToStarAllele();
         haplotypeToStarAllele.determineStarAlleles();
         haplotypeToStarAllele.writeStarAlleles();
 
+        //star allele to phenotypes
         StarAlleleToPhenotype starAlleleToPhenotype = new StarAlleleToPhenotype(haplotypeToStarAllele.getGenes());
         starAlleleToPhenotype.readConversionTables();
 
@@ -116,7 +144,9 @@ public class StarAlleleToPhenotype {
 
         new File(PREDICTED_PHENOTYPES_OUTPUT_DIR).mkdirs();
 
-        File sampleMatrixFile = new File("/Users/harmbrugge/Documents/PGx/data/richtlijn/sample_matrix.csv");
+        //File sampleMatrixFile = new File("/Users/harmbrugge/Documents/PGx/data/richtlijn/sample_matrix.csv");
+        //File sampleMatrixFile = new File("C:\\molgenis\\asterix_data\\sample_matrix.csv");
+        File sampleMatrixFile = new File(SAMPLE_MATRIX_OUT);
         FileWriter fileWriter0 = new FileWriter(sampleMatrixFile.getAbsoluteFile());
         BufferedWriter bw0 = new BufferedWriter(fileWriter0);
 
