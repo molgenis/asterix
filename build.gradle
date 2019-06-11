@@ -10,7 +10,7 @@ sourceCompatibility = 1.8
 jar {
 
     manifest {
-        attributes('Main-Class': 'org.molgenis.asterix.AppStarter')
+        attributes('Main-Class': 'org.molgenis.asterix.pipeline.AppStarter')
     }
 
     from {

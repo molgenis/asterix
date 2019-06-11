@@ -110,23 +110,20 @@ public class StarAlleleToPhenotype {
 
     }
 
-    public static void run() throws IOException {
-
-        //haplotype to start allele
-        HaplotypeToStarAllele haplotypeToStarAllele = new HaplotypeToStarAllele();
-        haplotypeToStarAllele.determineStarAlleles();
-        haplotypeToStarAllele.writeStarAlleles();
-
-        //star allele to phenotypes
-        StarAlleleToPhenotype starAlleleToPhenotype = new StarAlleleToPhenotype(haplotypeToStarAllele.getGenes());
-        starAlleleToPhenotype.readConversionTables();
+    /**
+     * determine the phenotypes of the samples from their star alleles (values will be set to the
+     * @param haplotypeToStarAllele Object to get star alleles from, and set the predicted phenotype for
+     * @throws IOException
+     */
+    public void determinePhenotypes(HaplotypeToStarAllele haplotypeToStarAllele) throws IOException {
+        this.readConversionTables();
 
         Map<String, Sample> samples = haplotypeToStarAllele.getSamples();
 
         for (Sample sample : samples.values()) {
             for (PgxGene gene : sample.getGenes().values()) {
 
-                PgxGene geneWithInfo = starAlleleToPhenotype.genes.get(gene.getName());
+                PgxGene geneWithInfo = this.genes.get(gene.getName());
 
                 //TODO Fix this Alleles shouldn't be null
                 if (gene.getAllele0() == null) continue;
@@ -135,18 +132,32 @@ public class StarAlleleToPhenotype {
                 String functionAllele0 = geneWithInfo.getPgxHaplotypes().get(gene.getAllele0()).getFunction();
                 String functionAllele1 = geneWithInfo.getPgxHaplotypes().get(gene.getAllele1()).getFunction();
 
-                Map<List<String>, String> functionToPredictedPhenotype = starAlleleToPhenotype.genes.get(gene.getName()).getFunctionToPredictedPhenotype();
+                Map<List<String>, String> functionToPredictedPhenotype = this.genes.get(gene.getName()).getFunctionToPredictedPhenotype();
                 String predictedPhenotype = functionToPredictedPhenotype.get(Arrays.asList(functionAllele0, functionAllele1));
 
                 gene.setPredictedPhenotype(predictedPhenotype);
             }
         }
 
+
+
+    }
+
+    /**
+     * write the phenotypes that were predicted
+     * @param haplotypeToStarAllele Object containing the samples and their predicted phenotypes
+     * @throws IOException
+     */
+    public void writePhenotypes(HaplotypeToStarAllele haplotypeToStarAllele) throws IOException{
         new File(PREDICTED_PHENOTYPES_OUTPUT_DIR).mkdirs();
+
+        Map<String, Sample> samples = haplotypeToStarAllele.getSamples();
 
         //write resulting phenotypes to matrix/matrices
         writeSampleMatrix(haplotypeToStarAllele, samples);
 
+
+        //TODO not sure what this was for anymore
         for (PgxGene pgxGene : haplotypeToStarAllele.getGenes().values()) {
 
             File predictedPhenotypeOutputFile = new File(PREDICTED_PHENOTYPES_OUTPUT_DIR + pgxGene.getName() + "_predicted_phenotypes.txt");
@@ -156,13 +167,13 @@ public class StarAlleleToPhenotype {
             BufferedWriter bw = new BufferedWriter(fileWriter);
 
             for (Sample sample : samples.values()) {
+                //TODO due to decoupling of previously linked methods, the predicted phenotype might be null if the user uses the methods in the wrong order
                 String line = sample.getId() + "\t" + sample.getGenes().get(pgxGene.getName()).getPredictedPhenotype() + "\n";
                 bw.write(line);
             }
 
             bw.close();
         }
-
     }
 
     /**
@@ -411,5 +422,15 @@ public class StarAlleleToPhenotype {
      */
     private static String getSampleMatrixHeader(HaplotypeToStarAllele haplotypeToStarAllele){
         return getSampleMatrixHeader(haplotypeToStarAllele, "");
+    }
+
+
+    public Map<String, PgxGene> getGenes(){
+        if(null == this.genes){
+            return new TreeMap<String, PgxGene>();
+        }
+        else{
+            return this.genes;
+        }
     }
 }
