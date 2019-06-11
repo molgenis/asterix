@@ -37,6 +37,11 @@ public class ConfigConstants {
     protected static final String OPTION_SAMPLE_MATRIX_OUT = "sample_matrix_out";
     protected static final String DEFAULT_SAMPLE_MATRIX_OUT = "sample_matrix.csv";
 
+    //whether to split the out file per person
+    public static final String SPLIT_SAMPLES_PP = "SPLIT_SAMPLES_PP";
+    protected static final String OPTION_SPLIT_SAMPLES_PP = "split_samples";
+    protected static final String DEFAULT_SPLIT_SAMPLES_PP = "false";
+
     //help string cli
     protected static final String OPTION_HELP = "help";
 

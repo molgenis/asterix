@@ -66,6 +66,7 @@ public class ConfigProvider {
         this.possibleCliArguments.add(ConfigConstants.OPTION_HAPLO_PHENO_TABLE_DIR);
         this.possibleCliArguments.add(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.possibleCliArguments.add(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT);
+        this.possibleCliArguments.add(ConfigConstants.OPTION_SPLIT_SAMPLES_PP);
     }
 
     /**
@@ -77,7 +78,8 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_HAPLO_PHENO_TABLE_DIR, true, "the directory of the tables to map the haplotypes to phenotypes");
         this.options.addOption(ConfigConstants.OPTION_HAPLOTYPE_DIR, true, "the directory of the haplotypes to parse");
         this.options.addOption(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, true, "the directory where the predicted phenotypes are written");
-        this.options.addOption(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, true, "the output file for the sample matrix (comma separated file)");
+        this.options.addOption(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, true, "the output file for the sample matrix (comma separated file), or a directory if splitting by sample");
+        this.options.addOption(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, true, "whether to split the output sample matrix per sample (person");
         //the help option
         this.options.addOption(ConfigConstants.OPTION_HELP, false, "print the help");
     }
@@ -92,6 +94,7 @@ public class ConfigProvider {
         this.cliOptionToName.put(ConfigConstants.OPTION_HAPLOTYPE_DIR, ConfigConstants.HAPLOTYPE_DIR);
         this.cliOptionToName.put(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.cliOptionToName.put(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, ConfigConstants.SAMPLE_MATRIX_OUT);
+        this.cliOptionToName.put(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, ConfigConstants.SPLIT_SAMPLES_PP);
     }
 
     /**
@@ -104,6 +107,7 @@ public class ConfigProvider {
         this.storedConfig.put(ConfigConstants.HAPLO_PHENO_TABLE_DIR, ConfigConstants.DEFAULT_HAPLO_PHENO_TABLE_DIR);
         this.storedConfig.put(ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR, ConfigConstants.DEFAULT_PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.storedConfig.put(ConfigConstants.SAMPLE_MATRIX_OUT, ConfigConstants.DEFAULT_SAMPLE_MATRIX_OUT);
+        this.storedConfig.put(ConfigConstants.SPLIT_SAMPLES_PP, ConfigConstants.DEFAULT_SPLIT_SAMPLES_PP);
     }
 
     /**
@@ -132,6 +136,7 @@ public class ConfigProvider {
                 }
             }
         }
+
     }
 
     /**
