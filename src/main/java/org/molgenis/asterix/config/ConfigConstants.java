@@ -42,6 +42,9 @@ public class ConfigConstants {
     protected static final String OPTION_SPLIT_SAMPLES_PP = "split_samples";
     protected static final String DEFAULT_SPLIT_SAMPLES_PP = "false";
 
+    //properties loading via external .properties file
+    protected static final String OPTION_PROPERTIES_FILE = "properties";
+
     //help string cli
     protected static final String OPTION_HELP = "help";
 

@@ -1,5 +1,9 @@
 package org.molgenis.asterix.config;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 
 import org.apache.commons.cli.*;
@@ -80,9 +84,11 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, true, "the directory where the predicted phenotypes are written");
         this.options.addOption(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, true, "the output file for the sample matrix (comma separated file), or a directory if splitting by sample");
         this.options.addOption(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, true, "whether to split the output sample matrix per sample (person");
+        //the properties via an external file option
+        this.options.addOption(ConfigConstants.OPTION_PROPERTIES_FILE, true, "set configuration via this file instead of via command line arguments");
         //the help option
         this.options.addOption(ConfigConstants.OPTION_HELP, false, "print the help");
-    }
+            }
 
     /**
      * map CLI option strings to constant names
@@ -125,6 +131,10 @@ public class ConfigProvider {
                 //help is printed and set here, it is up to the Object using this Provider to determine if it wants to continue on
                 this.printHelp();
             }
+            //check if the user wanted to supply arguments via a properties file
+            if(cmd.hasOption(ConfigConstants.OPTION_PROPERTIES_FILE)){
+                this.loadExternalPropertiesFile(cmd.getOptionValue(cmd.getOptionValue(ConfigConstants.OPTION_PROPERTIES_FILE)));
+            }
             //if properties are available, overwrite the defaults
             for(String option : this.possibleCliArguments){
                 if(cmd.hasOption(option)){
@@ -165,8 +175,29 @@ public class ConfigProvider {
     /**
      * print the help/manual
      */
-    public void printHelp(){
+    private void printHelp(){
         this.helpFormatter.printHelp("asterix", this.options);
+    }
+
+    /**
+     * load config from a .properties file
+     * @param pathToFile the path to the .properties file
+     */
+    private void loadExternalPropertiesFile(String pathToFile){
+        try {
+            //try and load the properties from the supplied file
+            Properties loadedProperties = new Properties();
+            InputStream inputStream = new FileInputStream(pathToFile);
+            loadedProperties.load(inputStream);
+            //the user does not have to supply all properties, so this list might be incomplete, we will thus use this list to overwrite defaults
+            Set<String> propertyNames = loadedProperties.stringPropertyNames();
+            for(String propertyName: propertyNames){
+                this.storedConfig.put(propertyName, loadedProperties.getProperty(propertyName));
+            }
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
