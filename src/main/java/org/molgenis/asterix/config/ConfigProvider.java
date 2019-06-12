@@ -88,7 +88,7 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_PROPERTIES_FILE, true, "set configuration via this file instead of via command line arguments");
         //the help option
         this.options.addOption(ConfigConstants.OPTION_HELP, false, "print the help");
-            }
+    }
 
     /**
      * map CLI option strings to constant names
@@ -133,7 +133,7 @@ public class ConfigProvider {
             }
             //check if the user wanted to supply arguments via a properties file
             if(cmd.hasOption(ConfigConstants.OPTION_PROPERTIES_FILE)){
-                this.loadExternalPropertiesFile(cmd.getOptionValue(cmd.getOptionValue(ConfigConstants.OPTION_PROPERTIES_FILE)));
+                this.loadExternalPropertiesFile(cmd.getOptionValue(ConfigConstants.OPTION_PROPERTIES_FILE));
             }
             //if properties are available, overwrite the defaults
             for(String option : this.possibleCliArguments){
@@ -178,6 +178,19 @@ public class ConfigProvider {
     private void printHelp(){
         this.helpFormatter.printHelp("asterix", this.options);
     }
+
+    /*
+    following method \/ uses .properties file that would/can contain the following
+
+    STAR_ALLELE_OUTPUT_DIR=C:\\molgenis\\asterix_data\\star_alleles\\
+    SNP_HAPLO_TABLE_DIR=C:\\molgenis\\asterix_data\\snp_to_haplo\\
+    HAPLOTYPE_DIR=C:\\molgenis\\asterix_data\\ll_phased_active\\
+    HAPLO_PHENO_TABLE_DIR=C:\\molgenis\\asterix_data\\haplo_to_pheno\\
+    PREDICTED_PHENOTYPES_OUTPUT_DIR=C:\\molgenis\\asterix_data\\predicted_phenotypes\\
+    SAMPLE_MATRIX_OUT=C:\\molgenis\\asterix_data\\sample_matrix.csv
+    SPLIT_SAMPLES_PP=false
+
+     */
 
     /**
      * load config from a .properties file
