@@ -1,4 +1,4 @@
-package org.molgenis.asterix;
+package org.molgenis.asterix.pipeline;
 
 import org.apache.commons.cli.ParseException;
 import org.molgenis.asterix.config.ConfigProvider;
@@ -7,6 +7,8 @@ import java.io.IOException;
 
 /**
  * class that is the application entrypoint
+ *
+ * @author OelenR
  */
 public class AppStarter {
 
@@ -35,8 +37,8 @@ public class AppStarter {
             configProvider.loadCliArguments(args);
             //check for help request by user
             if(!configProvider.isRequestedHelp()){
-                //do the actual work
-                StarAlleleToPhenotype.run();
+                Pipeline pipeline = new Pipeline();
+                pipeline.doPipeline();
             }
         }
         catch (IOException e) {
