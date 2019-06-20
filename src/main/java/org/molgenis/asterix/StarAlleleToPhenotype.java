@@ -10,7 +10,7 @@ import java.util.*;
 public class StarAlleleToPhenotype {
 
     //internal value, to switch from having the value names in a vertical column or as header
-    private static boolean valueNameVertical = false;
+    private static boolean VALUE_NAME_VERTICAL = false;
 
     //input dir for converting haplotype to phenotype (star alleles to functions)
     private static String CONVERSION_TABLE_DIR;
@@ -199,7 +199,7 @@ public class StarAlleleToPhenotype {
      */
     private static void writeSampleMatrixSplit(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, Sample> samples) throws IOException{
         //decide on a vertical or horizontal values file
-        if(valueNameVertical){
+        if(VALUE_NAME_VERTICAL){
             writeSampleMatrixSplitVertical(haplotypeToStarAllele, samples);
         }
         else{
