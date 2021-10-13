@@ -109,7 +109,7 @@ class ArgumentParser:
                                  help="Samplesheet")
 
     def add_final_report_path_argument(self, parser):
-        parser.add_argument('-g', '--final-report-file-path', type=self.is_readable_dir, required=True, nargs='+', default=None,
+        parser.add_argument('-g', '--final-report-file-path', type=self.is_readable_file, required=True, nargs='+', default=None,
                                  help="Path to where final report files are located")
 
     def add_out_argument(self):
