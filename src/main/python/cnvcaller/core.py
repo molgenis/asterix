@@ -413,8 +413,10 @@ def main(argv=None):
             variant_list, columns=("Chromosome", "Start", "End", "Name"))
         manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
-        locus_of_interest = pd.read_csv(args.bed_file,
-                                        names=("Chromosome", "Start", "End", "Name"))
+        locus_of_interest = pd.read_csv(
+            args.bed_file,
+            names=("Chromosome", "Start", "End", "Name"),
+            sep="\t")
         locus_ranges = pyranges.PyRanges(locus_of_interest)
 
         variants_in_locus = manifest_ranges.intersect(locus_ranges)
