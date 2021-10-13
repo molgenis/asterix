@@ -138,6 +138,23 @@ class ArgumentParser:
         return float_value
 
     @staticmethod
+    def can_write_to_file_path(file):
+        """
+        Checks whether the given directory is readable
+        :param file: a path to a directory in string format
+        :return: file
+        :raises: Exception: if the dirname of the given path is invalid
+        :raises: Exception: if the dirname of the given directory is not writable
+        """
+        directory = os.path.dirname(file)
+        if not os.path.isdir(directory):
+            raise argparse.ArgumentTypeError("directory: {0} is not a valid path".format(directory))
+        if os.access(directory, os.R_OK):
+            return file
+        else:
+            raise argparse.ArgumentTypeError("directory: {0} is not a readable dir".format(directory))
+
+    @staticmethod
     def is_readable_dir(directory):
         """
         Checks whether the given directory is readable
@@ -221,7 +238,7 @@ class ArgumentParser:
 
     def add_staged_data_argument(self, parser):
         parser.add_argument(
-            '--out', type=lambda x: self.is_writable_location(os.path.dirname(x)),
+            '--out', type=self.can_write_to_file_path,
             metavar="PATH_TO_NEW_PICKLE_FILE", default=0.01,
             help="path to a pickle file")
 
