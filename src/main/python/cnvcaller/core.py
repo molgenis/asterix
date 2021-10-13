@@ -178,7 +178,7 @@ class ArgumentParser:
 
     def add_correction_arguments(self, parser):
         parser.add_argument(
-            '-v' '--corrective-variants', type=self.is_readable_file,
+            '-v', '--corrective-variants', type=self.is_readable_file,
             help="filters out all variants that are not listed here"
         )
         # self.parser.add_argument(
