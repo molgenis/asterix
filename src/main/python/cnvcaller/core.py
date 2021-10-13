@@ -67,7 +67,7 @@ class ArgumentParser:
         parser_for_input_preparation = subparsers.add_parser(
             'stage-data', help="Process final report files to pickled panda DataFrames.")
         self.add_final_report_path_argument(parser_for_input_preparation)
-        self.add_correction_parameter_argument(parser_for_input_preparation)
+        self.add_correction_arguments(parser_for_input_preparation)
         self.add_staged_data_argument(parser_for_input_preparation)
 
         parser_for_correction = subparsers.add_parser(
