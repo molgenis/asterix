@@ -324,7 +324,7 @@ class FinalReportGenotypeDataReader:
         #         "Samples in manifest do not perfectly intersect with samples in sample sheet",
         #         self._line_counter)
         return pandas.DataFrame(
-            np.array(data_array_list),
+            np.array(data_array_list).transpose(),
             index=self._variants_to_include.Name.to_numpy(),
             columns=sample_list)
     def _read_sample_intensities(self, buffer, columns):
