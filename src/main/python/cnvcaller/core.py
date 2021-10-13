@@ -462,7 +462,7 @@ def main(argv=None):
             manifest_data_frame, sample_sheet["Sample_ID"],
             variants_to_read).read_intensity_data()
 
-        intensity_data.to_pickle(os.path.join(args.out, "data", args.final_report_file_path))
+        intensity_data.to_pickle(args.out)
 
     # args.
 
