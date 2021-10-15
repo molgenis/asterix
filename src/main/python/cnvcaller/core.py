@@ -96,7 +96,7 @@ class ArgumentParser:
         remainder = args[-1]
         if "data" in self.command and len(self.command) > 1:
             raise argparse.ArgumentError(command_parser._actions[1], "The command data cannot be used in combination with other commands")
-        self.extend_argument_parser(args.command)
+        self.extend_argument_parser()
         self.parser.parse_args(remainder)
 
         return args
@@ -243,16 +243,16 @@ class ArgumentParser:
         )
 
     def extend_argument_parser(self, command):
-        if "data" in command:
+        if self.is_action_requested("data"):
             self.add_final_report_path_argument(self.parser)
             self.add_corrective_variants_argument(self.parser)
             self.add_stage_data_output_argument(self.parser)
-        if "correction" in command:
+        if self.is_action_requested("correction"):
             self.add_staged_data_argument(self.parser)
             self.add_out_argument(self.parser)
-        if "fit" in command:
+        if self.is_action_requested("fit"):
             self.add_staged_data_argument(self.parser)
-        if "call" in command:
+        if self.is_action_requested("call"):
             self.add_staged_data_argument(self.parser)
             self.add_calling_parameter_argument(self.parser)
 
