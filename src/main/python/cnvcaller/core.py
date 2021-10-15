@@ -90,16 +90,15 @@ class ArgumentParser:
         """
 
         command_parser = self.create_command_parser()
-        args = command_parser.parse_known_args(argv)
-        print(args)
-        self.command = args[0].command
-        remainder = args[-1]
+        args_partial = command_parser.parse_known_args(argv)
+        self.command = args_partial[0].command
+        remainder = args_partial[-1]
         if "data" in self.command and len(self.command) > 1:
             raise argparse.ArgumentError(command_parser._actions[1], "The command data cannot be used in combination with other commands")
         self.extend_argument_parser()
-        self.parser.parse_args(remainder)
+        args_remainder = self.parser.parse_args(remainder)
 
-        return args
+        return args_remainder
 
     @staticmethod
     def create_command_parser():
@@ -242,7 +241,7 @@ class ArgumentParser:
             help="filters out all variants that are not listed here"
         )
 
-    def extend_argument_parser(self, command):
+    def extend_argument_parser(self):
         if self.is_action_requested("data"):
             self.add_final_report_path_argument(self.parser)
             self.add_corrective_variants_argument(self.parser)
@@ -539,7 +538,7 @@ def method_name(args, manifest_ranges):
     corrective_variants = manifest_ranges[manifest_ranges.Name.isin(corrective_variant_names)]
     chromosome_sizes = pyranges.data.chromsizes().as_df()
     filtered_chromosome_sizes = chromosome_sizes.loc[chromosome_sizes.Chromosome.isin(AUTOSOMES_CHR)]
-    filtered_chromosome_sizes['proportionsExpected'] = \
+    filtered_chromosome_sizes.loc[:,'proportionsExpected'] = \
         filtered_chromosome_sizes.End / np.sum(filtered_chromosome_sizes.End)
     filtered_chromosome_sizes = filtered_chromosome_sizes.rename(
         columns={"Start": "ChromSizeStart", "End": "ChromSizeEnd"})
