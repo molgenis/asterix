@@ -242,7 +242,7 @@ class ArgumentParser:
             help="filters out all variants that are not listed here"
         )
 
-    def extend_argument_parser(self, command):
+    def extend_argument_parser(self):
         if self.is_action_requested("data"):
             self.add_final_report_path_argument(self.parser)
             self.add_corrective_variants_argument(self.parser)
