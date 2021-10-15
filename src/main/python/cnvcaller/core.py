@@ -94,7 +94,7 @@ class ArgumentParser:
         print(args)
         self.command = args[0].command
         remainder = args[-1]
-        if "data" in self.command & len(self.command) > 1:
+        if "data" in self.command and len(self.command) > 1:
             raise argparse.ArgumentError(command_parser._actions[1], "The command data cannot be used in combination with other commands")
         self.extend_argument_parser(args.command)
         self.parser.parse_args(remainder)
