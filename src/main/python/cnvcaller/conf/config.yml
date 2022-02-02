@@ -1,0 +1,3 @@
+batch correction:
+  - pca_scale: true
+  - fit_intercept: false
