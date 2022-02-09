@@ -367,6 +367,9 @@ class FinalReportReaderException(Exception):
 
 
 class FinalReportGenotypeDataReader:
+    """
+    Read final report files
+    """
     new_part_pattern = re.compile(r"^\[\w+]$")
 
     def __init__(self, path, manifest, sample_list, variant_list):
@@ -380,6 +383,10 @@ class FinalReportGenotypeDataReader:
         self._line_counter = 0
 
     def read_intensity_data(self):
+        """
+        Method that reads the intensity values from a final report file.
+        :return: Data frame.
+        """
         with open(self._path, self.get_reading_mode()) as buffer:
             part_buffer = list()
             for line in buffer:
