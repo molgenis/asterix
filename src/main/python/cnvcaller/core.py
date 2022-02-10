@@ -69,7 +69,7 @@ class ArgumentParser:
 
     class SubCommand(enum.Enum):
         DATA = "data"
-        BATCH_WEIGHTS = "batch-weights"
+        CORRECTION = "correction"
         FIT = "fit"
         CALL = "call"
 
@@ -255,21 +255,21 @@ class ArgumentParser:
     def extend_argument_parser(self):
         sub_command_mapping = {
             self.SubCommand.DATA:
-                (self.add_final_report_path_argument,
+                {self.add_final_report_path_argument,
                  self.add_corrective_variants_argument,
-                 self.add_staged_data_output_argument),
-            self.SubCommand.BATCH_WEIGHTS:
-                (self.add_staged_data_argument,
+                 self.add_staged_data_output_argument},
+            self.SubCommand.CORRECTION:
+                {self.add_staged_data_argument,
                  self.add_corrective_variants_argument,
-                 self.add_batch_weights_argument),
+                 self.add_batch_weights_argument},
             self.SubCommand.FIT:
-                (self.add_staged_data_argument,
+                {self.add_staged_data_argument,
                  self.add_batch_weights_argument,
-                 self.add_calling_cluster_weight_argument),
+                 self.add_calling_cluster_weight_argument},
             self.SubCommand.CALL:
-                (self.add_staged_data_argument,
+                {self.add_staged_data_argument,
                  self.add_batch_weights_argument,
-                 self.add_calling_cluster_weight_argument)}
+                 self.add_calling_cluster_weight_argument}}
 
         methods_to_run = set.union(*[sub_command_mapping.get(sub_command) for sub_command in self.sub_commands])
         if self.add_staged_data_argument in methods_to_run and self.add_staged_data_output_argument in methods_to_run:
@@ -734,7 +734,7 @@ def main(argv=None):
 
     intensity_correction = None
 
-    if parser.is_action_requested(ArgumentParser.SubCommand.BATCH_WEIGHTS):
+    if parser.is_action_requested(ArgumentParser.SubCommand.CORRECTION):
         # Sample corrective variants
         sampled_corrective_variants = sample_corrective_variants_proportionally(
             args.corrective_variants, manifest_ranges)
