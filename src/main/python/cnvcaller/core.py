@@ -57,7 +57,6 @@ AUTOSOMES_CHR = ["chr{}".format(chrom) for chrom in range(1, 23)]
 
 
 class ArgumentParser:
-
     def __init__(self):
         self.sub_commands = list()
         self.parser = self.create_argument_parser()
@@ -66,20 +65,16 @@ class ArgumentParser:
         self.add_sample_sheet_argument()
         self.add_bed_path_parameter()
         self.add_debug_parameter()
-
     class SubCommand(enum.Enum):
         DATA = "data"
         CORRECTION = "correction"
         FIT = "fit"
         CALL = "call"
-
         @classmethod
         def list(cls):
             return list(map(lambda c: c.value, cls))
-
         def __str__(self):
             return self.name.lower()
-
     def add_subparsers(self):
         subparsers = self.parser.add_subparsers(help='procedure to run')
         parser_for_input_preparation = subparsers.add_parser(
@@ -96,7 +91,6 @@ class ArgumentParser:
         parser_for_calling = subparsers.add_parser('call', help="Call CNVs using correction and calling parameters")
         self.add_staged_data_argument(parser_for_calling)
         self.add_calling_parameter_argument(parser_for_calling)
-
     def parse_input(self, argv):
         """
         Parse command line input.
@@ -112,10 +106,8 @@ class ArgumentParser:
         self.extend_argument_parser()
         args_remainder = self.parser.parse_args(argv)
         return args_remainder
-
     def is_action_requested(self, sub_command):
         return sub_command in self.sub_commands
-
     @staticmethod
     def create_command_parser():
         parser = argparse.ArgumentParser(
@@ -132,13 +124,11 @@ class ArgumentParser:
                 "  call           Call CNVs using correction and calling parameters"])))
         ArgumentParser.add_command_choice_argument(parser)
         return parser
-
     @classmethod
     def add_command_choice_argument(cls, parser):
         parser.add_argument('command',
                             help='Command(s) to run', nargs="+",
                             choices=cls.SubCommand.list())
-
     @staticmethod
     def create_argument_parser():
         """
@@ -149,22 +139,18 @@ class ArgumentParser:
         parser = argparse.ArgumentParser(description="CNV-calling algorithm",
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         return parser
-
     def add_sample_sheet_argument(self):
         self.parser.add_argument('-s', '--sample-sheet', type=self.is_readable_file,
                                  required=True,
                                  default=None,
                                  help="Samplesheet")
-
     def add_final_report_path_argument(self, parser):
         parser.add_argument('-g', '--final-report-file-path', type=self.is_readable_file, required=True, default=None,
                             help="Path to where final report files are located")
-
     def add_out_argument(self, parser):
         parser.add_argument('-o', '--out', type=self.is_writable_location,
                             required=True, default=None,
                             help="File path the output can be written to. ")
-
     def add_bed_path_parameter(self):
         self.parser.add_argument('-b', '--bed-file', type=self.is_readable_file,
                                  required=True,
@@ -172,7 +158,6 @@ class ArgumentParser:
                                  help="Bed file detailing a locus of interest."
                                       "This is excluded in corrections, and exclusively"
                                       "assessed in the fitting and calling steps")
-
     @classmethod
     def can_write_to_file_path(cls, file):
         """
@@ -189,7 +174,6 @@ class ArgumentParser:
             return file
         else:
             raise argparse.ArgumentTypeError("directory: {0} is not a readable dir".format(directory))
-
     @classmethod
     def is_readable_dir(cls, directory):
         """
@@ -205,7 +189,6 @@ class ArgumentParser:
             return directory
         else:
             raise argparse.ArgumentTypeError("directory: {0} is not a readable dir".format(directory))
-
     @classmethod
     def is_readable_file(cls, file_path):
         """
@@ -221,7 +204,6 @@ class ArgumentParser:
             return file_path
         else:
             raise argparse.ArgumentTypeError("file path:{0} is not a readable file".format(file_path))
-
     @classmethod
     def is_data(cls, path, extension_expected):
         """
@@ -238,20 +220,17 @@ class ArgumentParser:
             raise argparse.ArgumentTypeError(
                 "file path:{0} is not of type .'{1}'. (.'{2}' received)".format(
                     path, extension_actual, extension_expected))
-
     @classmethod
     def is_writable_location(cls, path):
         if os.access(path, os.W_OK):
             return path
         else:
             raise argparse.ArgumentTypeError("directory: {0} is not a writable path".format(path))
-
     def add_corrective_variants_argument(self, parser):
         parser.add_argument(
             '-v', '--corrective-variants', type=self.is_readable_file,
             help="filters out all variants that are not listed here"
         )
-
     def extend_argument_parser(self):
         sub_command_mapping = {
             self.SubCommand.DATA:
@@ -270,37 +249,30 @@ class ArgumentParser:
                 {self.add_staged_data_argument,
                  self.add_batch_weights_argument,
                  self.add_calling_cluster_weight_argument}}
-
         methods_to_run = set.union(*[sub_command_mapping.get(sub_command) for sub_command in self.sub_commands])
         if self.add_staged_data_argument in methods_to_run and self.add_staged_data_output_argument in methods_to_run:
             methods_to_run.discard(self.add_staged_data_argument)
-
         for method in methods_to_run:
             method(self.parser)
-
     def add_batch_weights_argument(self, parser):
         parser.add_argument('-c', '--correction', type=self.is_readable_dir,
                             required=True, nargs='+', default=None,
                             help="path where batch correction weights, and corrected data are stored."
                                  "output of the batch weighting step")
-
     def add_calling_cluster_weight_argument(self, parser):
         parser.add_argument('-C', '--cluster-file', type=self.is_readable_dir,
                             required=True, nargs='+', default=None,
                             help="path where cluster weights are stored."
                                  "output of the fitting step")
-
     def add_bead_pool_manifest_argument(self):
         self.parser.add_argument('-bpm', '--bead-pool-manifest', type=self.is_readable_file,
                                  required=True, default=None,
                                  help="path to a .bpm file corresponding to the genotyping array")
-
     def add_staged_data_output_argument(self, parser):
         parser.add_argument(
             '--out', type=self.can_write_to_file_path,
             metavar="PATH_TO_NEW_PICKLE_FILE",
             help="path to a pickle file")
-
     def add_staged_data_argument(self, parser):
         parser.add_argument(
             '--input', '-i', type=lambda arg: self.is_data(arg, '.pkl'), nargs="+",
@@ -308,18 +280,15 @@ class ArgumentParser:
             help=os.linesep.join([
                 "paths directing to .pkl files with intensity data.",
                 "Columns should correspond to samples and rows should correspond to variants."]))
-
     def add_debug_parameter(self):
         self.parser.add_argument(
             '--debug', '-d', action="store_true", default=False,
             help="write files useful for debugging"
         )
-
     def add_config_parameter(self):
         self.parser.add_argument(
             '--config', '-s', type=self.config, required=True,
             help="config file")
-
     @classmethod
     def config(cls, path):
         return yaml.safe_load(open(path))
@@ -328,7 +297,6 @@ class ArgumentParser:
 class IntensityDataReader:
     def __init__(self, sample_list):
         self._sample_list = sample_list
-
     def load(self, data):
         data_frame_list = list()
         for file in data:
@@ -336,13 +304,16 @@ class IntensityDataReader:
             # if data_frame.index != self._variant_list:
             #     raise Exception("variants don't match")
             data_frame_list.append(data_frame)
+        print(data_frame_list)
         intensity_data = pd.concat(data_frame_list, axis=1)
         sample_list = intensity_data.columns.to_numpy()
         missing_samples = np.setdiff1d(self._sample_list, sample_list)
+        print(len(missing_samples))
         if len(missing_samples) > 0:
             print(missing_samples)
-            print("warnign: {}".format(missing_samples))
+            print("warning: {}".format(missing_samples))
         excess_samples = np.setdiff1d(sample_list, self._sample_list)
+        print(len(excess_samples))
         if len(excess_samples) > 0:
             print(excess_samples)
             raise Exception("Excess samples")
@@ -442,11 +413,12 @@ class FinalReportGenotypeDataReader:
                     current_sample = sample_id
                     print(sample_counter, current_sample)
             else:
-                data_array_list.append(self._read_sample_intensities(sample_buffer, columns))
-                sample_list.append(current_sample)
-                if sample_counter == 10:
-                    break
-                sample_counter += 1
+                if sample_id in self._sample_list:
+                    data_array_list.append(self._read_sample_intensities(sample_buffer, columns))
+                    sample_list.append(current_sample)
+                    sample_counter += 1
+                else:
+                    print("Skipping sample since it is not in the sample list: {}".format(sample_id))
                 # Reset buffer
                 sample_buffer.truncate(0)
                 sample_buffer.seek(0)
@@ -455,8 +427,9 @@ class FinalReportGenotypeDataReader:
                 print(sample_counter, current_sample)
         # if len(np.intersect1d(self._sample_list,
         #                       sample_list)) != len(self._sample_list):
-        #     raise GenotypeDataReaderException(
+        #     raise FinalReportReaderException(
         #         "Samples in manifest do not perfectly intersect with samples in sample sheet",
+        #         self._path,
         #         self._line_counter)
         return pd.DataFrame(
             np.array(data_array_list).transpose(),
@@ -469,13 +442,13 @@ class FinalReportGenotypeDataReader:
                                         sep=self.sep,
                                         usecols=["Sample ID", "SNP Name", "X_raw", "Y_raw"],
                                         dtype={"Sample ID": str, "SNP Name": str, "X_raw": np.int32, "Y_raw": np.int32})
-        # if not np.all(self._manifest.Name.to_numpy() == sample_data_frame["SNP Name"].to_numpy()):
-        #     raise GenotypeDataReaderException(
-        #         "Variants in manifest do not perfectly intersect with variants of sample {}"
-        #             .format(sample_data_frame["Sample ID"][0]), self._line_counter)
+        if not np.all(self._manifest.Name.to_numpy() == sample_data_frame["SNP Name"].to_numpy()):
+            raise FinalReportReaderException(
+                "Variants in manifest do not perfectly intersect with variants of sample {}"
+                    .format(sample_data_frame["Sample ID"][0]), self._path, self._line_counter)
         return sample_data_frame.iloc[
             self._variants_to_include_indices,
-            [2, 3]].values.sum(axis=1)
+            [2, 3]].pow(2).sum(axis=1).pow(0.5).values
 
     def _get_indices(self):
         x = self._manifest.Name.to_numpy()
@@ -725,6 +698,8 @@ def main(argv=None):
             args.final_report_file_path,
             manifest_data_frame, sample_sheet["Sample_ID"],
             variants_to_read).read_intensity_data()
+
+        intensity_data.columns.to_csv(args.out)
 
         intensity_data.to_pickle(args.out)
 
