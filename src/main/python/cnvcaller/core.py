@@ -53,7 +53,7 @@ __description__ = "{} is a program developed and maintained by {}. " \
 
 # Classes
 
-AUTOSOMES_CHR = ["chr{}".format(chrom) for chrom in range(1, 23)]
+AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
 
 
 class ArgumentParser:
@@ -579,8 +579,9 @@ def calculate_downsampling_factor(grouped_data_frame, N):
 
 def draw_variants_proportionate(grouped_data_frame):
 
+    print(grouped_data_frame)
     # Get the downsampling factor for the specific chromosome.
-    downsampling_factor = grouped_data_frame.downsampling_factor.unique()
+    downsampling_factor = grouped_data_frame.downsamplingFactor.unique()
 
     # Perform sampling
     return (grouped_data_frame
@@ -598,6 +599,9 @@ def sample_corrective_variants_proportionally(corrective_variant_path, manifest_
     # Now get details for these variants from the manifest file.
 
     corrective_variants = manifest_ranges[manifest_ranges.Name.isin(corrective_variant_names)]
+
+    print(corrective_variant_names)
+    print(corrective_variants)
 
     # We need to sample a number of variants so that a number of variants are
     # drawn that are proportionate to the total length of each autosome.
@@ -656,7 +660,7 @@ def main(argv=None):
     variant_list = list()
     for variant_index in range(manifest.num_loci):
         variant_list.append((
-            "chr{}".format(manifest.chroms[variant_index]),
+            manifest.chroms[variant_index],
             manifest.map_infos[variant_index],
             manifest.map_infos[variant_index],
             manifest.names[variant_index]))
@@ -668,24 +672,40 @@ def main(argv=None):
 
     # Read locus of interest
     locus_of_interest = pd.read_csv(
-        args.bed_file,
+        args.bed_file, index_col=False,
         names=("Chromosome", "Start", "End", "Name"),
+        dtype={"Chromosome": str},
         sep="\t")
+
+    print(manifest_data_frame)
+    print(locus_of_interest)
+
+    #locus_of_interest.Chromosome = "chr{}".format(locus_of_interest.Chromosome)
 
     # Convert the locus of interest to a pyranges object
     locus_ranges = pyranges.PyRanges(locus_of_interest)
 
+
+    print(locus_ranges)
+    print(manifest_ranges)
+
     # Get the intersect between the variants that are in the manifest and the locus of interest
     variants_in_locus = manifest_ranges.intersect(locus_ranges)
+
+    print(variants_in_locus)
 
     # Read the sample sheet
     sample_sheet = pd.read_csv(args.sample_sheet, sep=",")
 
     if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
 
+        print(manifest_ranges)
+
         # Sample corrective variants
         sampled_corrective_variants = sample_corrective_variants_proportionally(
             args.corrective_variants, manifest_ranges)
+
+        print(sampled_corrective_variants)
 
         # Combine the variants we use for correction and the variants in the locus of interest.
         # We have to use both
