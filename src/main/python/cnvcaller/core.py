@@ -62,6 +62,7 @@ class ArgumentParser:
         self.parser = self.create_argument_parser()
         self.add_command_choice_argument(self.parser)
         self.add_bead_pool_manifest_argument(self.parser)
+        self.add_corrective_variants_argument(self.parser)
         self.add_sample_sheet_argument()
         self.add_bed_path_parameter()
         self.add_debug_parameter()
@@ -236,10 +237,9 @@ class ArgumentParser:
     def extend_argument_parser(self):
         sub_command_mapping = {
             self.SubCommand.VARIANTS:
-                {self.add_corrective_variants_argument},
+                {},
             self.SubCommand.DATA:
-                {self.add_final_report_path_argument,
-                 self.add_corrective_variants_argument},
+                {self.add_final_report_path_argument},
             self.SubCommand.FIT:
                 {self.add_staged_data_argument},
             self.SubCommand.CALL:
@@ -706,17 +706,22 @@ def main(argv=None):
     if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
 
         # Get batch correction configuration
-        intensity_correction_parameters = args.config['batch correction']
+        value_to_use = args.config['base']['value']
         intensity_correction_parameters = args.config['batch correction']
 
+        # Load intensity data
         intensity_data_frame_reader = IntensityDataReader(sample_sheet["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
-        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", value = )
+        # Intensity matrix
+        intensity_matrix = intensity_data_frame.pivot_table(columns = "Sample ID", values = value_to_use)
+        intensity_matrix.to_csv(
+            ".".join([args.out, "mat", value_to_use, "csv"]),
+            sep="\t", index_label='variant')
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection(sampled_corrective_variants, **intensity_correction_parameters)
-        intensity_correction.fit(intensity_data)
+        intensity_correction.fit(intensity_matrix)
 
         # Write output for intensity correction
         intensity_correction.write_output(args.out)
