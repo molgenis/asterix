@@ -65,6 +65,7 @@ class ArgumentParser:
         self.add_sample_sheet_argument()
         self.add_bed_path_parameter()
         self.add_debug_parameter()
+        self.add_config_parameter()
         self.add_out_argument(self.parser)
     class SubCommand(enum.Enum):
         VARIANTS = "variants"
@@ -300,17 +301,13 @@ class IntensityDataReader:
             # if data_frame.index != self._variant_list:
             #     raise Exception("variants don't match")
             data_frame_list.append(data_frame)
-            print(file)
-            print(np.setdiff1d(data_frame["Sample ID"].unique(), self._sample_list))
         intensity_data = pd.concat(data_frame_list)
         sample_list = intensity_data["Sample ID"].unique()
         missing_samples = np.setdiff1d(self._sample_list, sample_list)
-        print(len(missing_samples))
         if len(missing_samples) > 0:
             print(missing_samples)
             print("warning: {}".format(missing_samples))
         excess_samples = np.setdiff1d(sample_list, self._sample_list)
-        print(len(excess_samples))
         if len(excess_samples) > 0:
             print(excess_samples)
             raise Exception("Excess samples")
@@ -706,19 +703,16 @@ def main(argv=None):
 
         intensity_data.to_pickle(args.out)
 
-    else:
-        intensity_data_reader = IntensityDataReader(sample_sheet["Sample_ID"])
-        intensity_data = intensity_data_reader.load(args.input)
-
-    intensity_correction = None
-
     if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
-        # Sample corrective variants
-        sampled_corrective_variants = sample_corrective_variants_proportionally(
-            args.corrective_variants, manifest_ranges)
 
         # Get batch correction configuration
         intensity_correction_parameters = args.config['batch correction']
+        intensity_correction_parameters = args.config['batch correction']
+
+        intensity_data_frame_reader = IntensityDataReader(sample_sheet["Sample_ID"])
+        intensity_data_frame = intensity_data_frame_reader.load(args.input)
+
+        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", value = )
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection(sampled_corrective_variants, **intensity_correction_parameters)
@@ -727,12 +721,12 @@ def main(argv=None):
         # Write output for intensity correction
         intensity_correction.write_output(args.out)
 
-    if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
-
-        if intensity_correction is None:
-            intensity_correction = IntensityCorrection.load_instance(args.out)
-
-        corrected_intensities = intensity_correction.correct_intensities(intensity_data)
+    # if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
+    #
+    #     if intensity_correction is None:
+    #         intensity_correction = IntensityCorrection.load_instance(args.out)
+    #
+    #     corrected_intensities = intensity_correction.correct_intensities(intensity_data)
 
 
 
