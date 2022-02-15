@@ -61,11 +61,13 @@ class ArgumentParser:
         self.sub_commands = list()
         self.parser = self.create_argument_parser()
         self.add_command_choice_argument(self.parser)
-        self.add_bead_pool_manifest_argument()
+        self.add_bead_pool_manifest_argument(self.parser)
         self.add_sample_sheet_argument()
         self.add_bed_path_parameter()
         self.add_debug_parameter()
+        self.add_out_argument(self.parser)
     class SubCommand(enum.Enum):
+        VARIANTS = "variants"
         DATA = "data"
         CORRECTION = "correction"
         FIT = "fit"
@@ -116,6 +118,8 @@ class ArgumentParser:
                 "core.py <command> [<args>]",
                 "",
                 "The available commands are",
+                "  variants       Samples variants in proportion to chromosome",
+                "                 length.",
                 "  data           Prepares arrays of raw intensity data from",
                 "                 final report files.",
                 "  batch-weights  Perform decomposition for adjustment of raw",
@@ -148,9 +152,9 @@ class ArgumentParser:
         parser.add_argument('-g', '--final-report-file-path', type=self.is_readable_file, required=True, default=None,
                             help="Path to where final report files are located")
     def add_out_argument(self, parser):
-        parser.add_argument('-o', '--out', type=self.is_writable_location,
+        parser.add_argument('-o', '--out', type=self.can_write_to_file_path,
                             required=True, default=None,
-                            help="File path the output can be written to. ")
+                            help="File prefix the output can be written to. ")
     def add_bed_path_parameter(self):
         self.parser.add_argument('-b', '--bed-file', type=self.is_readable_file,
                                  required=True,
@@ -233,13 +237,13 @@ class ArgumentParser:
         )
     def extend_argument_parser(self):
         sub_command_mapping = {
+            self.SubCommand.VARIANTS:
+                {self.add_corrective_variants_argument},
             self.SubCommand.DATA:
                 {self.add_final_report_path_argument,
-                 self.add_corrective_variants_argument,
-                 self.add_staged_data_output_argument},
+                 self.add_corrective_variants_argument},
             self.SubCommand.CORRECTION:
                 {self.add_staged_data_argument,
-                 self.add_corrective_variants_argument,
                  self.add_batch_weights_argument},
             self.SubCommand.FIT:
                 {self.add_staged_data_argument,
@@ -264,8 +268,8 @@ class ArgumentParser:
                             required=True, nargs='+', default=None,
                             help="path where cluster weights are stored."
                                  "output of the fitting step")
-    def add_bead_pool_manifest_argument(self):
-        self.parser.add_argument('-bpm', '--bead-pool-manifest', type=self.is_readable_file,
+    def add_bead_pool_manifest_argument(self, parser):
+        parser.add_argument('-bpm', '--bead-pool-manifest', type=self.is_readable_file,
                                  required=True, default=None,
                                  help="path to a .bpm file corresponding to the genotyping array")
     def add_staged_data_output_argument(self, parser):
@@ -324,13 +328,11 @@ class FinalReportReaderException(Exception):
     """
     Exception raised for errors in the input final reports
     """
-
     def __init__(self, message, file, line_index):
         self.file = file
         self.message = message
         self.line_index = line_index
         super().__init__(self.message)
-
     def __str__(self):
         return os.linesep.join(["Exception encountered in file:",
                                 "'{1}', on line {2}: {3}"]).format(
@@ -342,17 +344,14 @@ class FinalReportGenotypeDataReader:
     Read final report files
     """
     new_part_pattern = re.compile(r"^\[\w+]$")
-
-    def __init__(self, path, manifest, sample_list, variant_list):
+    def __init__(self, path, sample_list, variant_list):
         self._part_key = None
         self.sep = "\t"
         self._path = path
-        self._manifest = manifest
         self._sample_list = sample_list
         self._variants_to_include = variant_list
-        self._variants_to_include_indices = self._get_indices()
+        self._variants_to_include_indices = None
         self._line_counter = 0
-
     def read_intensity_data(self):
         """
         Method that reads the intensity values from a final report file.
@@ -381,16 +380,13 @@ class FinalReportGenotypeDataReader:
                 else:
                     part_buffer.append(line)
         return data_frame
-
     def get_reading_mode(self):
         reading_mode = "r"
         if self._path.endswith(".gz"):
             reading_mode = "rb"
         return reading_mode
-
     def parse_header(self, part_buffer):
         pass
-
     def _read_data(self, buffer):
         data_array_list = list()
         sample_list = list()
@@ -431,31 +427,22 @@ class FinalReportGenotypeDataReader:
         #         "Samples in manifest do not perfectly intersect with samples in sample sheet",
         #         self._path,
         #         self._line_counter)
-        return pd.DataFrame(
-            np.array(data_array_list).transpose(),
-            index=self._variants_to_include.Name.to_numpy(),
-            columns=sample_list)
-
+        return pd.concat(data_array_list)
     def _read_sample_intensities(self, buffer, columns):
         buffer.seek(0)
         sample_data_frame = pd.read_csv(buffer, names=columns,
                                         sep=self.sep,
-                                        usecols=["Sample ID", "SNP Name", "X_raw", "Y_raw"],
-                                        dtype={"Sample ID": str, "SNP Name": str, "X_raw": np.int32, "Y_raw": np.int32})
-        if not np.all(self._manifest.Name.to_numpy() == sample_data_frame["SNP Name"].to_numpy()):
+                                        usecols=["Sample ID", "SNP Name", "X", "Y", "B Allele Freq", "Log R Ratio"],
+                                        dtype={"Sample ID": str, "SNP Name": str},
+                                        index_col="SNP Name")
+        sample_data_frame = sample_data_frame.loc[
+            self._variants_to_include.Name.to_numpy(),:]
+        sample_data_frame["R"] = sample_data_frame[["X", "Y"]].sum(axis=1).values
+        if not np.all(self._variants_to_include.Name.to_numpy() == sample_data_frame.index.to_numpy()):
             raise FinalReportReaderException(
-                "Variants in manifest do not perfectly intersect with variants of sample {}"
-                    .format(sample_data_frame["Sample ID"][0]), self._path, self._line_counter)
-        return sample_data_frame.iloc[
-            self._variants_to_include_indices,
-            [2, 3]].pow(2).sum(axis=1).pow(0.5).values
-
-    def _get_indices(self):
-        x = self._manifest.Name.to_numpy()
-        y = self._variants_to_include.Name.to_numpy()
-        xsorted = np.argsort(x)
-        ypos = np.searchsorted(x[xsorted], y)
-        return xsorted[ypos]
+                ("Variants in variants file do not perfectly intersect with variants of sample {}"
+                    .format(sample_data_frame["Sample ID"][0])), self._path, self._line_counter)
+        return sample_data_frame
 
 
 class IntensityCorrection:
@@ -572,75 +559,64 @@ class IntensityCorrection:
 
 # Functions
 def calculate_downsampling_factor(grouped_data_frame, N):
-    grouped_data_frame['downsamplingFactor'] = \
-        grouped_data_frame.shape[0] / (np.unique(grouped_data_frame.proportionsExpected)[0] * N)
+    grouped_data_frame['proportionsObserved'] = (
+        grouped_data_frame.shape[0] / N)
+    grouped_data_frame['downsamplingFactor'] = (
+        grouped_data_frame.proportionsExpected / grouped_data_frame.proportionsObserved)
     return grouped_data_frame
 
 
-def draw_variants_proportionate(grouped_data_frame):
-
+def draw_variants_proportionate(grouped_data_frame, max_downsampling_factor):
     print(grouped_data_frame)
     # Get the downsampling factor for the specific chromosome.
-    downsampling_factor = grouped_data_frame.downsamplingFactor.unique()
-
+    downsampling_factor = grouped_data_frame.downsamplingFactor.unique() / max_downsampling_factor
+    print(grouped_data_frame.downsamplingFactor.unique())
+    print(max_downsampling_factor)
+    print(downsampling_factor)
     # Perform sampling
     return (grouped_data_frame
-            .sample(frac=downsampling_factor, replace=False)
-            .reset_index(drop=True))
+            .sample(frac=float(downsampling_factor), replace=False))
 
 
 def sample_corrective_variants_proportionally(corrective_variant_path, manifest_ranges):
-
     # Read the names of those variants that adhere to a number of criteria.
     # This list can be obtained by running PLINK for instance.
-
     corrective_variant_names = pd.read_csv(corrective_variant_path, header=None)[0].to_list()
-
     # Now get details for these variants from the manifest file.
-
     corrective_variants = manifest_ranges[manifest_ranges.Name.isin(corrective_variant_names)]
-
-    print(corrective_variant_names)
-    print(corrective_variants)
-
+    print(len(corrective_variants))
     # We need to sample a number of variants so that a number of variants are
     # drawn that are proportionate to the total length of each autosome.
     # We therefore get the autosome sizes here.
-
     chromosome_sizes = pyranges.data.chromsizes().as_df()
+    chromosome_sizes.Chromosome = chromosome_sizes.Chromosome.apply(lambda x: x.lstrip("chr"))
     filtered_chromosome_sizes = chromosome_sizes.loc[chromosome_sizes.Chromosome.isin(AUTOSOMES_CHR)]
-
     # Now, we calculate the proportion of the total autosomes each autosome represents.
-
-    filtered_chromosome_sizes.loc[:, 'proportionsExpected'] = \
+    filtered_chromosome_sizes.loc[:,'proportionsExpected'] = \
         filtered_chromosome_sizes.End / np.sum(filtered_chromosome_sizes.End)
-
     # We rename the data frame for easy merging.
-
     filtered_chromosome_sizes = filtered_chromosome_sizes.rename(
         columns={"Start": "ChromSizeStart", "End": "ChromSizeEnd"})
-
     # We need to select variants so that these are equally distributed across chromosomes.
     # We do this by sampling n variants in each chromosome,
     # where n denotes the proportional length of every chromosome, multiplied by the number of variants to
     # sample
-
     # Calculate what proportion of variants in each chromosome should be
     # discarded.
-
     corrective_variants_extended = (corrective_variants.df
         .merge(filtered_chromosome_sizes, on='Chromosome')
         .groupby('Chromosome')
         .apply(calculate_downsampling_factor, len(corrective_variants)))
-
-    # Calculate the minimum downsampling factor
-
-    sampled_corrective_variants = (corrective_variants_extended
-        .groupby('Chromosome')
-        .apply(draw_variants_proportionate)
-        .reset_index(drop=True))
-
-    return sampled_corrective_variants
+    # Calculate the maximum downsampling factor
+    corrective_variants_grouped = corrective_variants_extended.groupby('Chromosome')
+    max_downsampling_factor = np.max(corrective_variants_extended.downsamplingFactor)
+    sampled_corrective_variants_list = list()
+    for group in corrective_variants_grouped.groups.keys():
+        grouped_data_frame = corrective_variants_grouped.get_group(group)
+        downsampling_factor = grouped_data_frame.downsamplingFactor.unique() / max_downsampling_factor
+        sampled_corrective_variants_list.append(grouped_data_frame
+                                                .sample(frac=float(downsampling_factor), replace=False))
+    return pd.concat(sampled_corrective_variants_list).loc[:,["Chromosome", "Start", "End", "Name"]]
 
 
 # Main
@@ -652,6 +628,16 @@ def main(argv=None):
     # Process input
     parser = ArgumentParser()
     args = parser.parse_input(argv[1:])
+
+    # Read locus of interest
+    locus_of_interest = pd.read_csv(
+        args.bed_file, index_col=False,
+        names=("Chromosome", "Start", "End", "Name"),
+        dtype={"Chromosome": str},
+        sep="\t")
+
+    # Convert the locus of interest to a pyranges object
+    locus_ranges = pyranges.PyRanges(locus_of_interest)
 
     # Read the bead pool manifest file
     manifest = IlluminaBeadArrayFiles.BeadPoolManifest(args.bead_pool_manifest)
@@ -670,54 +656,50 @@ def main(argv=None):
         variant_list, columns=("Chromosome", "Start", "End", "Name"))
     manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
-    # Read locus of interest
-    locus_of_interest = pd.read_csv(
-        args.bed_file, index_col=False,
-        names=("Chromosome", "Start", "End", "Name"),
-        dtype={"Chromosome": str},
-        sep="\t")
-
-    print(manifest_data_frame)
-    print(locus_of_interest)
-
-    #locus_of_interest.Chromosome = "chr{}".format(locus_of_interest.Chromosome)
-
-    # Convert the locus of interest to a pyranges object
-    locus_ranges = pyranges.PyRanges(locus_of_interest)
-
-
-    print(locus_ranges)
-    print(manifest_ranges)
-
     # Get the intersect between the variants that are in the manifest and the locus of interest
     variants_in_locus = manifest_ranges.intersect(locus_ranges)
-
-    print(variants_in_locus)
 
     # Read the sample sheet
     sample_sheet = pd.read_csv(args.sample_sheet, sep=",")
 
-    if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
-
-        print(manifest_ranges)
+    if parser.is_action_requested(ArgumentParser.SubCommand.VARIANTS):
 
         # Sample corrective variants
         sampled_corrective_variants = sample_corrective_variants_proportionally(
             args.corrective_variants, manifest_ranges)
 
-        print(sampled_corrective_variants)
+        corrective_variants_dataframe = (pd
+            .merge(sampled_corrective_variants, variants_in_locus,
+                   how="outer", indicator=True)
+            .mask["merge"] == "left_only")
 
-        # Combine the variants we use for correction and the variants in the locus of interest.
-        # We have to use both
-        variants_to_read = pyranges.PyRanges(pd.concat((
-            sampled_corrective_variants[["Chromosome", "Start", "End", "Name"]],
-            variants_in_locus.df)))
+        # variants as pyranges object
+        corrective_variants_dataframe.to_csv(
+            "{}.corrective.bed".format(args.out), index=False, sep="\t", header=False)
+
+    else:
+
+        # Read locus of interest
+        sampled_corrective_variants = pd.read_csv(
+            args.corrective_variants, index_col=False,
+            names=("Chromosome", "Start", "End", "Name"),
+            dtype={"Chromosome": str},
+            sep="\t")
+
+    # Convert the locus of interest to a pyranges object
+    variants_to_read = pyranges.concat([
+        pyranges.PyRanges(sampled_corrective_variants),
+        variants_in_locus])
+
+    if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
 
         # Get intensity data
-        intensity_data = FinalReportGenotypeDataReader(
+        intensity_data_reader = FinalReportGenotypeDataReader(
             args.final_report_file_path,
-            manifest_data_frame, sample_sheet["Sample_ID"],
-            variants_to_read).read_intensity_data()
+            sample_sheet["Sample_ID"].values,
+            variants_to_read.as_df())
+
+        intensity_data = intensity_data_reader.read_intensity_data()
 
         intensity_data.columns.to_csv(args.out)
 
