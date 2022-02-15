@@ -701,7 +701,7 @@ def main(argv=None):
 
         intensity_data = intensity_data_reader.read_intensity_data()
 
-        intensity_data.columns.to_csv(args.out)
+        #intensity_data.columns.to_csv(args.out)
 
         intensity_data.to_pickle(args.out)
 
