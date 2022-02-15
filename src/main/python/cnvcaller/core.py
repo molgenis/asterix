@@ -310,7 +310,7 @@ class IntensityDataReader:
         excess_samples = np.setdiff1d(sample_list, self._sample_list)
         if len(excess_samples) > 0:
             print(excess_samples)
-            raise Exception("Excess samples")
+            print("warning excess: {}".format(excess_samples))
         return intensity_data
 
 
@@ -446,7 +446,6 @@ class FinalReportGenotypeDataReader:
 class IntensityCorrection:
     def __init__(self, variant_list_for_locus, pca_n_components=None,
                  pca_scaling=True, regression_fit_intercept=False):
-
         self._variant_list_for_locus_of_interest = variant_list_for_locus
         self._scale = pca_scaling
         self._pca = sklearn.decomposition.PCA(
@@ -455,7 +454,6 @@ class IntensityCorrection:
             fit_intercept=regression_fit_intercept)
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
         self._corrected = None
-
     def fit(self, intensity_data):
         if self._scale:
             intensity_data_preprocessed = pd.DataFrame(
@@ -466,32 +464,23 @@ class IntensityCorrection:
         else:
             intensity_data_preprocessed = intensity_data[:,
                                           self.indices_not_in_locus_of_interest(intensity_data)]
-
         # Calculate the eigenvectors used to correct the correction variants.
         # These eigenvectors represent how to scale each variant in a sample
         # so that the result explaines covariability among the variants.
-
         # I.e., the projected principal components (PCs) explain batch effects.
         # We want to regress out these batch effects in the locus of interest.
-
         self._principal_components = pd.DataFrame(
             self._pca.fit_transform(intensity_data_preprocessed),
             index=intensity_data.index)
-
         # The projected principal components explain batch effects.
         # We try to explain as much of the locus of interest using the PCs
         # The residuals can be used in further analyses.
-
         self._correction_model.fit(
             self._principal_components, intensity_data[:, self._variant_list_for_locus_of_interest])
-
         # Write intensities of locus of interest corrected for batch effects.
         self._corrected = self._correct_batch_effects(intensity_data, self._principal_components)
-
         return
-
     def correct_intensities(self, intensity_data):
-
         if self._scale:
             intensity_data_preprocessed = pd.DataFrame(
                 self._standardize_scaler.transform(intensity_data[:,
@@ -501,44 +490,31 @@ class IntensityCorrection:
         else:
             intensity_data_preprocessed = intensity_data[:,
                                           self.indices_not_in_locus_of_interest(intensity_data)]
-
         # Get batch effects by calculating principal components
-
         principal_components = pd.DataFrame(
             self._pca.transform(intensity_data_preprocessed),
             index=intensity_data.index)
-
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
-
         corrected_intensities = self._correct_batch_effects(intensity_data, principal_components)
-
         return corrected_intensities
-
     def indices_not_in_locus_of_interest(self, intensity_data):
         return ~intensity_data.index.isin(
             self._variant_list_for_locus_of_interest)
-
     def _correct_batch_effects(self, intensity_data, principal_components):
-
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
-
         predicted_batch_effects_on_locus_of_interest = self._correction_model.predict(
             principal_components)
-
         # We can correct the locus of interest by subtracting the predicted batch effects
         # from the raw intensity data.
-
         corrected_intensities = intensity_data[:, self._variant_list_for_locus_of_interest] - \
                                 predicted_batch_effects_on_locus_of_interest
-
         return corrected_intensities
-
     def write_output(self, path):
         pickle.dump(self, open(
             ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
@@ -548,7 +524,6 @@ class IntensityCorrection:
             ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"]))
         self._corrected.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
-
     @classmethod
     def load_instance(cls, path):
         return pickle.load(open(
@@ -675,6 +650,9 @@ def main(argv=None):
         corrective_variants_dataframe.to_csv(
             "{}.corrective.bed".format(args.out), index=False, sep="\t", header=False)
 
+        variants_in_locus.as_df().to_csv(
+            "{}.locus.bed".format(args.out), index=False, sep="\t", header=False)
+
     else:
 
         # Read locus of interest
@@ -714,13 +692,28 @@ def main(argv=None):
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
         # Intensity matrix
-        intensity_matrix = intensity_data_frame.pivot_table(columns = "Sample ID", values = value_to_use)
+        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
         intensity_matrix.to_csv(
-            ".".join([args.out, "mat", value_to_use, "csv"]),
+            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
+            sep="\t", index_label='variant')
+
+        value_to_use = "B Allele Freq"
+
+        # Intensity matrix
+        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
+        intensity_matrix.to_csv(
+            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
+            sep="\t", index_label='variant')
+
+        value_to_use = "Log R Ratio"
+
+        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
+        intensity_matrix.to_csv(
+            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
             sep="\t", index_label='variant')
 
         # Do correction of intensities
-        intensity_correction = IntensityCorrection(sampled_corrective_variants, **intensity_correction_parameters)
+        intensity_correction = IntensityCorrection(variants_in_locus.Name.to_list(), **intensity_correction_parameters)
         intensity_correction.fit(intensity_matrix)
 
         # Write output for intensity correction
