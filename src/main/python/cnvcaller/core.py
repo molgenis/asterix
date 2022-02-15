@@ -414,6 +414,14 @@ class FinalReportGenotypeDataReader:
                 sample_buffer.write(line)
                 current_sample = sample_id
                 print(sample_counter, current_sample)
+
+        if current_sample is not None and current_sample in self._sample_list:
+            data_array_list.append(self._read_sample_intensities(sample_buffer, columns))
+            sample_list.append(current_sample)
+            sample_counter += 1
+        else:
+            print("Skipping sample since it is not in the sample list: {}".format(current_sample))
+
         # if len(np.intersect1d(self._sample_list,
         #                       sample_list)) != len(self._sample_list):
         #     raise FinalReportReaderException(
