@@ -69,7 +69,6 @@ class ArgumentParser:
     class SubCommand(enum.Enum):
         VARIANTS = "variants"
         DATA = "data"
-        CORRECTION = "correction"
         FIT = "fit"
         CALL = "call"
         @classmethod
@@ -122,8 +121,6 @@ class ArgumentParser:
                 "                 length.",
                 "  data           Prepares arrays of raw intensity data from",
                 "                 final report files.",
-                "  batch-weights  Perform decomposition for adjustment of raw",
-                "                 intensities.",
                 "  fit            Perform decomposition in locus of interest",
                 "  call           Call CNVs using correction and calling parameters"])))
         ArgumentParser.add_command_choice_argument(parser)
@@ -242,13 +239,8 @@ class ArgumentParser:
             self.SubCommand.DATA:
                 {self.add_final_report_path_argument,
                  self.add_corrective_variants_argument},
-            self.SubCommand.CORRECTION:
-                {self.add_staged_data_argument,
-                 self.add_batch_weights_argument},
             self.SubCommand.FIT:
-                {self.add_staged_data_argument,
-                 self.add_batch_weights_argument,
-                 self.add_calling_cluster_weight_argument},
+                {self.add_staged_data_argument},
             self.SubCommand.CALL:
                 {self.add_staged_data_argument,
                  self.add_batch_weights_argument,
@@ -308,9 +300,10 @@ class IntensityDataReader:
             # if data_frame.index != self._variant_list:
             #     raise Exception("variants don't match")
             data_frame_list.append(data_frame)
-        print(data_frame_list)
-        intensity_data = pd.concat(data_frame_list, axis=1)
-        sample_list = intensity_data.columns.to_numpy()
+            print(file)
+            print(np.setdiff1d(data_frame["Sample ID"].unique(), self._sample_list))
+        intensity_data = pd.concat(data_frame_list)
+        sample_list = intensity_data["Sample ID"].unique()
         missing_samples = np.setdiff1d(self._sample_list, sample_list)
         print(len(missing_samples))
         if len(missing_samples) > 0:
@@ -409,12 +402,12 @@ class FinalReportGenotypeDataReader:
                     current_sample = sample_id
                     print(sample_counter, current_sample)
             else:
-                if sample_id in self._sample_list:
+                if current_sample in self._sample_list:
                     data_array_list.append(self._read_sample_intensities(sample_buffer, columns))
                     sample_list.append(current_sample)
                     sample_counter += 1
                 else:
-                    print("Skipping sample since it is not in the sample list: {}".format(sample_id))
+                    print("Skipping sample since it is not in the sample list: {}".format(current_sample))
                 # Reset buffer
                 sample_buffer.truncate(0)
                 sample_buffer.seek(0)
@@ -711,7 +704,7 @@ def main(argv=None):
 
     intensity_correction = None
 
-    if parser.is_action_requested(ArgumentParser.SubCommand.CORRECTION):
+    if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
         # Sample corrective variants
         sampled_corrective_variants = sample_corrective_variants_proportionally(
             args.corrective_variants, manifest_ranges)
