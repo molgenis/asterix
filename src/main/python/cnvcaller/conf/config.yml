@@ -1,5 +1,5 @@
 base:
-  - value: "R"
+  value: "R"
 batch correction:
-  - pca_scale: true
-  - fit_intercept: false
+  pca_scale: true
+  fit_intercept: false
