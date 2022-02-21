@@ -253,12 +253,12 @@ class ArgumentParser:
         for method in methods_to_run:
             method(self.parser)
     def add_batch_weights_argument(self, parser):
-        parser.add_argument('-c', '--correction', type=self.is_readable_dir,
+        parser.add_argument('-C', '--correction', type=self.is_readable_dir,
                             required=True, nargs='+', default=None,
                             help="path where batch correction weights, and corrected data are stored."
                                  "output of the batch weighting step")
     def add_calling_cluster_weight_argument(self, parser):
-        parser.add_argument('-C', '--cluster-file', type=self.is_readable_dir,
+        parser.add_argument('-F', '--cluster-file', type=self.is_readable_dir,
                             required=True, nargs='+', default=None,
                             help="path where cluster weights are stored."
                                  "output of the fitting step")
@@ -285,7 +285,7 @@ class ArgumentParser:
         )
     def add_config_parameter(self):
         self.parser.add_argument(
-            '--config', '-s', type=self.config, required=True,
+            '--config', '-c', type=self.config, required=True,
             help="config file")
     @classmethod
     def config(cls, path):
