@@ -33,7 +33,7 @@ import yaml
 import numpy as np
 import pandas as pd
 import pyranges
-import sklearn
+import sklearn.decomposition
 import IlluminaBeadArrayFiles
 
 # Metadata
@@ -49,13 +49,13 @@ __description__ = "{} is a program developed and maintained by {}. " \
                                         __author__,
                                         __license__)
 
+
 # Constants
-
-# Classes
-
+DEFAULT_FINAL_REPORT_COLS = ["Sample ID", "SNP Name", "X", "Y", "B Allele Freq", "Log R Ratio"]
 AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
 
 
+# Classes
 class ArgumentParser:
     def __init__(self):
         self.sub_commands = list()
@@ -430,7 +430,7 @@ class FinalReportGenotypeDataReader:
         buffer.seek(0)
         sample_data_frame = pd.read_csv(buffer, names=columns,
                                         sep=self.sep,
-                                        usecols=["Sample ID", "SNP Name", "X", "Y", "B Allele Freq", "Log R Ratio"],
+                                        usecols=DEFAULT_FINAL_REPORT_COLS,
                                         dtype={"Sample ID": str, "SNP Name": str},
                                         index_col="SNP Name")
         sample_data_frame = sample_data_frame.loc[
@@ -456,13 +456,14 @@ class IntensityCorrection:
         self._corrected = None
     def fit(self, intensity_data):
         if self._scale:
+            print("Scaling")
             intensity_data_preprocessed = pd.DataFrame(
-                self._standardize_scaler.fit_transform(intensity_data[:,
-                                                       self.indices_not_in_locus_of_interest(intensity_data)]),
-                columns=self._variant_list_for_locus_of_interest,
+                self._standardize_scaler.fit_transform(intensity_data.loc[:, self.variant_indices(intensity_data)]),
+                columns=intensity_data.columns[self.variant_indices(intensity_data)],
                 index=intensity_data.index)
+            print("Scaling performed")
         else:
-            intensity_data_preprocessed = intensity_data[:,
+            intensity_data_preprocessed = intensity_data.loc[:,
                                           self.indices_not_in_locus_of_interest(intensity_data)]
         # Calculate the eigenvectors used to correct the correction variants.
         # These eigenvectors represent how to scale each variant in a sample
@@ -476,19 +477,23 @@ class IntensityCorrection:
         # We try to explain as much of the locus of interest using the PCs
         # The residuals can be used in further analyses.
         self._correction_model.fit(
-            self._principal_components, intensity_data[:, self._variant_list_for_locus_of_interest])
+            self._principal_components, intensity_data.loc[:, self._variant_list_for_locus_of_interest])
         # Write intensities of locus of interest corrected for batch effects.
         self._corrected = self._correct_batch_effects(intensity_data, self._principal_components)
         return
+    def variant_indices(self, intensity_data):
+        return np.logical_and(
+            self.indices_not_in_locus_of_interest(intensity_data),
+            ~intensity_data.isnull().any(axis=0))
     def correct_intensities(self, intensity_data):
         if self._scale:
             intensity_data_preprocessed = pd.DataFrame(
-                self._standardize_scaler.transform(intensity_data[:,
+                self._standardize_scaler.transform(intensity_data.loc[:,
                                                    self.indices_not_in_locus_of_interest(intensity_data)]),
-                columns=self._variant_list_for_locus_of_interest,
+                columns=intensity_data.columns[self.indices_not_in_locus_of_interest(intensity_data)],
                 index=intensity_data.index)
         else:
-            intensity_data_preprocessed = intensity_data[:,
+            intensity_data_preprocessed = intensity_data.loc[:,
                                           self.indices_not_in_locus_of_interest(intensity_data)]
         # Get batch effects by calculating principal components
         principal_components = pd.DataFrame(
@@ -501,7 +506,7 @@ class IntensityCorrection:
         corrected_intensities = self._correct_batch_effects(intensity_data, principal_components)
         return corrected_intensities
     def indices_not_in_locus_of_interest(self, intensity_data):
-        return ~intensity_data.index.isin(
+        return ~intensity_data.columns.isin(
             self._variant_list_for_locus_of_interest)
     def _correct_batch_effects(self, intensity_data, principal_components):
         # The principal components depict batch effects.
@@ -512,7 +517,7 @@ class IntensityCorrection:
             principal_components)
         # We can correct the locus of interest by subtracting the predicted batch effects
         # from the raw intensity data.
-        corrected_intensities = intensity_data[:, self._variant_list_for_locus_of_interest] - \
+        corrected_intensities = intensity_data[self._variant_list_for_locus_of_interest] - \
                                 predicted_batch_effects_on_locus_of_interest
         return corrected_intensities
     def write_output(self, path):
@@ -622,11 +627,14 @@ def main(argv=None):
             manifest.chroms[variant_index],
             manifest.map_infos[variant_index],
             manifest.map_infos[variant_index],
-            manifest.names[variant_index]))
+            manifest.names[variant_index],
+            manifest.snps[variant_index]))
 
     # Get table for the manifest
     manifest_data_frame = pd.DataFrame(
-        variant_list, columns=("Chromosome", "Start", "End", "Name"))
+        variant_list, columns=("Chromosome", "Start", "End", "Name", "Alleles"))
+
+    manifest_data_frame[['Ref', 'Alt']] = manifest_data_frame['Alleles'].str.split('\[(\w)/(\w)\]', expand=True).iloc[:,[1,2]]
     manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
     # Get the intersect between the variants that are in the manifest and the locus of interest
@@ -691,6 +699,10 @@ def main(argv=None):
         intensity_data_frame_reader = IntensityDataReader(sample_sheet["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
+        intensity_data_frame.to_csv(
+            ".".join([args.out, "intensity_data_frame", "csv.gz"]),
+            sep="\t", index_label='variant')
+
         # Intensity matrix
         intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
         intensity_matrix.to_csv(
@@ -713,8 +725,8 @@ def main(argv=None):
             sep="\t", index_label='variant')
 
         # Do correction of intensities
-        intensity_correction = IntensityCorrection(variants_in_locus.Name.to_list(), **intensity_correction_parameters)
-        intensity_correction.fit(intensity_matrix)
+        intensity_correction = IntensityCorrection(variants_in_locus.Name, **intensity_correction_parameters)
+        intensity_correction.fit(intensity_matrix.T)
 
         # Write output for intensity correction
         intensity_correction.write_output(args.out)
