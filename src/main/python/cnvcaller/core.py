@@ -51,7 +51,8 @@ __description__ = "{} is a program developed and maintained by {}. " \
 
 
 # Constants
-DEFAULT_FINAL_REPORT_COLS = ["Sample ID", "SNP Name", "X", "Y", "B Allele Freq", "Log R Ratio"]
+DEFAULT_FINAL_REPORT_COLS = ["Sample ID", "SNP Name", "GType", "SNP",
+                             "X", "Y", "B Allele Freq", "Log R Ratio"]
 AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
 
 
@@ -699,7 +700,7 @@ def main(argv=None):
         intensity_data_frame_reader = IntensityDataReader(sample_sheet["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
-        intensity_data_frame.to_csv(
+        intensity_data_frame[variants_in_locus.Name].to_csv(
             ".".join([args.out, "intensity_data_frame", "csv.gz"]),
             sep="\t", index_label='variant')
 
