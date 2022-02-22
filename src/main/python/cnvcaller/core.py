@@ -63,9 +63,7 @@ class ArgumentParser:
         self.parser = self.create_argument_parser()
         self.add_command_choice_argument(self.parser)
         self.add_bead_pool_manifest_argument(self.parser)
-        self.add_corrective_variants_argument(self.parser)
         self.add_sample_sheet_argument()
-        self.add_bed_path_parameter()
         self.add_debug_parameter()
         self.add_config_parameter()
         self.add_out_argument(self.parser)
@@ -155,8 +153,8 @@ class ArgumentParser:
         parser.add_argument('-o', '--out', type=self.can_write_to_file_path,
                             required=True, default=None,
                             help="File prefix the output can be written to. ")
-    def add_bed_path_parameter(self):
-        self.parser.add_argument('-b', '--bed-file', type=self.is_readable_file,
+    def add_bed_path_parameter(self, parser):
+        parser.add_argument('-b', '--bed-file', type=self.is_readable_file,
                                  required=True,
                                  default=None,
                                  help="Bed file detailing a locus of interest."
@@ -208,6 +206,19 @@ class ArgumentParser:
             return file_path
         else:
             raise argparse.ArgumentTypeError("file path:{0} is not a readable file".format(file_path))
+    def is_prefix_pointing_to_readables(cls, prefix, suffixes):
+        """
+        Checks whether the given directory is readable
+        :param suffixes: a list of suffixes to check
+        :param prefix: a prefix to a file in string format
+        :return: file_path
+        :raises: Exception: if the given path is invalid
+        :raises: Exception: if the given directory is not accessible
+        """
+        for suffix in suffixes:
+            file_path = "{}.{}".format(prefix, suffix)
+            assert file_path == cls.is_readable_file(file_path)
+        return prefix
     @classmethod
     def is_data(cls, path, extension_expected):
         """
@@ -235,12 +246,21 @@ class ArgumentParser:
             '-v', '--corrective-variants', type=self.is_readable_file,
             help="filters out all variants that are not listed here"
         )
+    def add_variant_prefix_argument(self, parser):
+        parser.add_argument(
+            '-V', '--variants-prefix',
+            type=self.is_prefix_pointing_to_readables,
+            help="matches .locus.bed and .corrective.bed files."
+        )
     def extend_argument_parser(self):
         sub_command_mapping = {
             self.SubCommand.VARIANTS:
-                {},
+                {self.add_window_argument,
+                 self.add_bed_path_parameter,
+                 self.add_corrective_variants_argument},
             self.SubCommand.DATA:
-                {self.add_final_report_path_argument},
+                {self.add_final_report_path_argument,
+                 self.add_variant_prefix_argument},
             self.SubCommand.FIT:
                 {self.add_staged_data_argument},
             self.SubCommand.CALL:
@@ -252,6 +272,11 @@ class ArgumentParser:
             methods_to_run.discard(self.add_staged_data_argument)
         for method in methods_to_run:
             method(self.parser)
+    def add_window_argument(self, parser):
+        parser.add_argument('-w', '--window', type=int,
+                            required=False, default=0,
+                            help="number of variants to extend the locus of interest"
+                                 "for variants")
     def add_batch_weights_argument(self, parser):
         parser.add_argument('-C', '--correction', type=self.is_readable_dir,
                             required=True, nargs='+', default=None,
@@ -571,8 +596,8 @@ def sample_corrective_variants_proportionally(corrective_variant_path, manifest_
     chromosome_sizes.Chromosome = chromosome_sizes.Chromosome.apply(lambda x: x.lstrip("chr"))
     filtered_chromosome_sizes = chromosome_sizes.loc[chromosome_sizes.Chromosome.isin(AUTOSOMES_CHR)]
     # Now, we calculate the proportion of the total autosomes each autosome represents.
-    filtered_chromosome_sizes.loc[:,'proportionsExpected'] = \
-        filtered_chromosome_sizes.End / np.sum(filtered_chromosome_sizes.End)
+    filtered_chromosome_sizes = filtered_chromosome_sizes.assign(
+        proportionsExpected=lambda d: d["End"] / np.sum(d["End"]))
     # We rename the data frame for easy merging.
     filtered_chromosome_sizes = filtered_chromosome_sizes.rename(
         columns={"Start": "ChromSizeStart", "End": "ChromSizeEnd"})
@@ -582,7 +607,7 @@ def sample_corrective_variants_proportionally(corrective_variant_path, manifest_
     # sample
     # Calculate what proportion of variants in each chromosome should be
     # discarded.
-    corrective_variants_extended = (corrective_variants.df
+    corrective_variants_extended = (corrective_variants
         .merge(filtered_chromosome_sizes, on='Chromosome')
         .groupby('Chromosome')
         .apply(calculate_downsampling_factor, len(corrective_variants)))
@@ -608,16 +633,6 @@ def main(argv=None):
     parser = ArgumentParser()
     args = parser.parse_input(argv[1:])
 
-    # Read locus of interest
-    locus_of_interest = pd.read_csv(
-        args.bed_file, index_col=False,
-        names=("Chromosome", "Start", "End", "Name"),
-        dtype={"Chromosome": str},
-        sep="\t")
-
-    # Convert the locus of interest to a pyranges object
-    locus_ranges = pyranges.PyRanges(locus_of_interest)
-
     # Read the bead pool manifest file
     manifest = IlluminaBeadArrayFiles.BeadPoolManifest(args.bead_pool_manifest)
 
@@ -638,43 +653,69 @@ def main(argv=None):
     manifest_data_frame[['Ref', 'Alt']] = manifest_data_frame['Alleles'].str.split('\[(\w)/(\w)\]', expand=True).iloc[:,[1,2]]
     manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
-    # Get the intersect between the variants that are in the manifest and the locus of interest
-    variants_in_locus = manifest_ranges.intersect(locus_ranges)
-
     # Read the sample sheet
     sample_sheet = pd.read_csv(args.sample_sheet, sep=",")
 
     if parser.is_action_requested(ArgumentParser.SubCommand.VARIANTS):
 
+        # Read locus of interest
+        locus_of_interest = pd.read_csv(
+            args.locus, index_col=False,
+            names=("Chromosome", "Start", "End", "Name"),
+            dtype={"Chromosome": str},
+            sep="\t")
+
+        # Convert the locus of interest to a pyranges object
+        locus_ranges = pyranges.PyRanges(locus_of_interest)
+
+        # Get the intersect between the variants that are in the manifest and the locus of interest
+        variants_in_locus = manifest_ranges.intersect(locus_ranges)
+
+        variants_in_locus_extended = (pyranges.concat([
+            locus_ranges[[]].k_nearest(
+                manifest_ranges, how="downstream", overlap=True,
+                k=(args.window + len(variants_in_locus))),
+            locus_ranges[[]].k_nearest(
+                manifest_ranges, how="upstream", overlap=False,
+                k=args.window)])
+            .new_position("swap"))[["Chromosome", "Start", "End", "Name", "Distance"]]
+
+        manifest_ranges_locus_excluded = (
+                pd.merge(manifest_ranges.as_df(), variants_in_locus.as_df(),
+                         how="outer", indicator=True)
+                .query('_merge == "left_only"'))
+
         # Sample corrective variants
         sampled_corrective_variants = sample_corrective_variants_proportionally(
-            args.corrective_variants, manifest_ranges)
-
-        corrective_variants_dataframe = (pd
-            .merge(sampled_corrective_variants, variants_in_locus,
-                   how="outer", indicator=True)
-            .mask["merge"] == "left_only")
+            args.corrective_variants, manifest_ranges_locus_excluded)
 
         # variants as pyranges object
-        corrective_variants_dataframe.to_csv(
+        sampled_corrective_variants.to_csv(
             "{}.corrective.bed".format(args.out), index=False, sep="\t", header=False)
 
-        variants_in_locus.as_df().to_csv(
+        variants_in_locus_extended.as_df().to_csv(
             "{}.locus.bed".format(args.out), index=False, sep="\t", header=False)
 
     else:
 
         # Read locus of interest
         sampled_corrective_variants = pd.read_csv(
-            args.corrective_variants, index_col=False,
+            "{}.corrective.bed".format(args.variants_prefix), index_col=False,
             names=("Chromosome", "Start", "End", "Name"),
+            dtype={"Chromosome": str},
+            sep="\t")
+
+        # Read locus of interest
+        variants_in_locus = pd.read_csv(
+            "{}.locus.bed".format(args.variants_prefix), index_col=False,
+            names=("Chromosome", "Start", "End", "Name", "Distance"),
             dtype={"Chromosome": str},
             sep="\t")
 
     # Convert the locus of interest to a pyranges object
     variants_to_read = pyranges.concat([
-        pyranges.PyRanges(sampled_corrective_variants),
-        variants_in_locus])
+        pyranges.PyRanges(variants_in_locus),
+        pyranges.PyRanges(sampled_corrective_variants)])
 
     if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
 
@@ -685,8 +726,6 @@ def main(argv=None):
             variants_to_read.as_df())
 
         intensity_data = intensity_data_reader.read_intensity_data()
-
-        #intensity_data.columns.to_csv(args.out)
 
         intensity_data.to_pickle(args.out)
 
@@ -700,7 +739,7 @@ def main(argv=None):
         intensity_data_frame_reader = IntensityDataReader(sample_sheet["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
-        intensity_data_frame[variants_in_locus.Name].to_csv(
+        intensity_data_frame.loc[variants_in_locus.Name].to_csv(
             ".".join([args.out, "intensity_data_frame", "csv.gz"]),
             sep="\t", index_label='variant')
 
@@ -710,20 +749,20 @@ def main(argv=None):
             ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
             sep="\t", index_label='variant')
 
-        value_to_use = "B Allele Freq"
-
-        # Intensity matrix
-        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
-        intensity_matrix.to_csv(
-            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
-            sep="\t", index_label='variant')
-
-        value_to_use = "Log R Ratio"
-
-        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
-        intensity_matrix.to_csv(
-            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
-            sep="\t", index_label='variant')
+        # value_to_use = "B Allele Freq"
+        #
+        # # Intensity matrix
+        # intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
+        # intensity_matrix.to_csv(
+        #     ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
+        #     sep="\t", index_label='variant')
+        #
+        # value_to_use = "Log R Ratio"
+        #
+        # intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
+        # intensity_matrix.to_csv(
+        #     ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
+        #     sep="\t", index_label='variant')
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection(variants_in_locus.Name, **intensity_correction_parameters)
