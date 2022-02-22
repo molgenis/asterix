@@ -249,7 +249,7 @@ class ArgumentParser:
     def add_variant_prefix_argument(self, parser):
         parser.add_argument(
             '-V', '--variants-prefix',
-            type=self.is_prefix_pointing_to_readables,
+            type=lambda x: self.is_prefix_pointing_to_readables(x, ["corrective.bed", "locus.bed"]),
             help="matches .locus.bed and .corrective.bed files."
         )
     def extend_argument_parser(self):
