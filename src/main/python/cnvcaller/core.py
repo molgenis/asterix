@@ -715,8 +715,8 @@ def main(argv=None):
 
     # Convert the locus of interest to a pyranges object
     variants_to_read = pyranges.concat([
-        pyranges.PyRanges(variants_in_locus),
-        pyranges.PyRanges(sampled_corrective_variants)])
+        pyranges.PyRanges(variants_in_locus.drop("Distance", axis=1)),
+        pyranges.PyRanges(sampled_corrective_variants)]).drop_duplicate_positions(keep="first")
 
     if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
 
@@ -745,7 +745,8 @@ def main(argv=None):
             sep="\t", index_label='variant')
 
         # Intensity matrix
-        intensity_matrix = intensity_data_frame.pivot(columns = "Sample ID", values = value_to_use)
+        intensity_matrix = intensity_data_frame.pivot(
+            columns="Sample ID", values=value_to_use)
         intensity_matrix.to_csv(
             ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
             sep="\t", index_label='variant')
