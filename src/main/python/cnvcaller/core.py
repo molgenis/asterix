@@ -262,7 +262,8 @@ class ArgumentParser:
                 {self.add_final_report_path_argument,
                  self.add_variant_prefix_argument},
             self.SubCommand.FIT:
-                {self.add_staged_data_argument},
+                {self.add_staged_data_argument,
+                 self.add_variant_prefix_argument},
             self.SubCommand.CALL:
                 {self.add_staged_data_argument,
                  self.add_batch_weights_argument,
