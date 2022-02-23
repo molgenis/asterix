@@ -481,17 +481,17 @@ class IntensityCorrection:
             fit_intercept=regression_fit_intercept)
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
         self._corrected = None
-    def fit(self, intensity_data):
+    def fit(self, reference_intensity_data, target_intensity_data):
         if self._scale:
             print("Scaling")
             intensity_data_preprocessed = pd.DataFrame(
-                self._standardize_scaler.fit_transform(intensity_data.loc[:, self.variant_indices(intensity_data)]),
-                columns=intensity_data.columns[self.variant_indices(intensity_data)],
-                index=intensity_data.index)
+                self._standardize_scaler.fit_transform(reference_intensity_data.loc[:, self.variant_indices(reference_intensity_data)]),
+                columns=reference_intensity_data.columns[self.variant_indices(reference_intensity_data)],
+                index=reference_intensity_data.index)
             print("Scaling performed")
         else:
-            intensity_data_preprocessed = intensity_data.loc[:,
-                                          self.indices_not_in_locus_of_interest(intensity_data)]
+            intensity_data_preprocessed = reference_intensity_data.loc[:,
+                                          self.indices_not_in_locus_of_interest(reference_intensity_data)]
         # Calculate the eigenvectors used to correct the correction variants.
         # These eigenvectors represent how to scale each variant in a sample
         # so that the result explaines covariability among the variants.
@@ -499,14 +499,14 @@ class IntensityCorrection:
         # We want to regress out these batch effects in the locus of interest.
         self._principal_components = pd.DataFrame(
             self._pca.fit_transform(intensity_data_preprocessed),
-            index=intensity_data.index)
+            index=reference_intensity_data.index)
         # The projected principal components explain batch effects.
         # We try to explain as much of the locus of interest using the PCs
         # The residuals can be used in further analyses.
         self._correction_model.fit(
-            self._principal_components, intensity_data.loc[:, self._variant_list_for_locus_of_interest])
+            self._principal_components, target_intensity_data.loc[:, self._variant_list_for_locus_of_interest])
         # Write intensities of locus of interest corrected for batch effects.
-        self._corrected = self._correct_batch_effects(intensity_data, self._principal_components)
+        self._corrected = self._correct_batch_effects(target_intensity_data, self._principal_components)
         return
     def variant_indices(self, intensity_data):
         return np.logical_and(
@@ -716,7 +716,9 @@ def main(argv=None):
     # Convert the locus of interest to a pyranges object
     variants_to_read = pyranges.concat([
         pyranges.PyRanges(variants_in_locus.drop("Distance", axis=1)),
-        pyranges.PyRanges(sampled_corrective_variants)]).drop_duplicate_positions(keep="first")
+        pyranges.PyRanges(sampled_corrective_variants)])
+
+    variants_to_read = variants_to_read[~variants_to_read.Name.duplicated()]
 
     if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
 
