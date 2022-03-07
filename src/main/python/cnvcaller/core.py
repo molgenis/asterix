@@ -29,6 +29,7 @@ import re
 import sys
 import argparse
 import yaml
+import re
 
 import numpy as np
 import pandas as pd
@@ -57,6 +58,49 @@ AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
 
 
 # Classes
+class GenomicWindow:
+    BP_UNITS = {"bp": 1, "kb": 1000, "mb": 1000000}
+    UNITS = tuple(BP_UNITS.keys()) + ("variants",)
+    def __init__(self, window, unit="variants"):
+        self.unit = unit
+        self.window = window
+    def get_variants(self, locus_ranges, manifest_ranges):
+        if self.unit == "variants":
+            return pd.concat([
+                self.get_n_variants(locus_ranges, manifest_ranges),
+                manifest_ranges.intersect(locus_ranges)])
+        else:
+            return manifest_ranges.intersect(
+                locus_ranges.extend(self.get_window("bp")))
+    def get_n_variants(self, locus_ranges, manifest_ranges):
+        return (pyranges.concat([
+            locus_ranges[[]].k_nearest(
+                manifest_ranges, how="downstream", overlap=False,
+                k=self.window),
+            locus_ranges[[]].k_nearest(
+                manifest_ranges, how="upstream", overlap=False,
+                k=self.window)]))
+    @classmethod
+    def from_string(cls, window_as_string):
+        regex_match = re.fullmatch(r"(\d+)(\w+)?", window_as_string)
+        if regex_match is None:
+            raise ValueError("window declaration {} not valid".format(window_as_string))
+        window, unit = regex_match.group(1, 2)
+        cls._unit_check(unit)
+        if unit is None:
+            unit = "variants"
+        return GenomicWindow(int(window), unit)
+    @classmethod
+    def _unit_check(cls, unit):
+        if unit is not None and unit not in cls.UNITS and unit is not None:
+            raise ValueError("window unit not valid. {} not in {}".format(unit, cls.UNITS))
+    def __str__(self):
+        return " ".join([self.window, self.unit])
+    def get_window(self, unit):
+        self._unit_check(unit)
+        return self.window * (self.BP_UNITS[self.unit] / self.BP_UNITS[unit])
+
+
 class ArgumentParser:
     def __init__(self):
         self.sub_commands = list()
@@ -274,9 +318,9 @@ class ArgumentParser:
         for method in methods_to_run:
             method(self.parser)
     def add_window_argument(self, parser):
-        parser.add_argument('-w', '--window', type=int,
+        parser.add_argument('-w', '--window', type=GenomicWindow.from_string,
                             required=False, default=0,
-                            help="number of variants to extend the locus of interest"
+                            help="number of variants or kb to extend the locus of interest"
                                  "for variants")
     def add_batch_weights_argument(self, parser):
         parser.add_argument('-C', '--correction', type=self.is_readable_dir,
@@ -472,7 +516,9 @@ class FinalReportGenotypeDataReader:
 
 class IntensityCorrection:
     def __init__(self, variant_list_for_locus, pca_n_components=None,
+                 pca_over_samples=True,
                  pca_scaling=True, regression_fit_intercept=False):
+        self._pca_over_samples = pca_over_samples
         self._variant_list_for_locus_of_interest = variant_list_for_locus
         self._scale = pca_scaling
         self._pca = sklearn.decomposition.PCA(
@@ -481,78 +527,112 @@ class IntensityCorrection:
             fit_intercept=regression_fit_intercept)
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
         self._corrected = None
+        self._batch_effects = None
     def fit(self, reference_intensity_data, target_intensity_data):
+        reference_intensity_data_sliced = (
+            reference_intensity_data.loc[:, self.variant_indices(reference_intensity_data)])
         if self._scale:
-            print("Scaling")
-            intensity_data_preprocessed = pd.DataFrame(
-                self._standardize_scaler.fit_transform(reference_intensity_data.loc[:, self.variant_indices(reference_intensity_data)]),
-                columns=reference_intensity_data.columns[self.variant_indices(reference_intensity_data)],
-                index=reference_intensity_data.index)
-            print("Scaling performed")
+            if self._pca_over_samples:
+                reference_intensity_data_sliced = reference_intensity_data_sliced.T
+            intensity_data_preprocessed = self._scale_fit_transform(reference_intensity_data_sliced)
         else:
-            intensity_data_preprocessed = reference_intensity_data.loc[:,
-                                          self.indices_not_in_locus_of_interest(reference_intensity_data)]
+            intensity_data_preprocessed = reference_intensity_data_sliced
         # Calculate the eigenvectors used to correct the correction variants.
         # These eigenvectors represent how to scale each variant in a sample
         # so that the result explaines covariability among the variants.
         # I.e., the projected principal components (PCs) explain batch effects.
         # We want to regress out these batch effects in the locus of interest.
-        self._principal_components = pd.DataFrame(
-            self._pca.fit_transform(intensity_data_preprocessed),
-            index=reference_intensity_data.index)
+        self._pca_fit_transform(intensity_data_preprocessed)
+        print(self._batch_effects)
         # The projected principal components explain batch effects.
         # We try to explain as much of the locus of interest using the PCs
         # The residuals can be used in further analyses.
+        target_intensity_data_sliced = target_intensity_data.loc[:, self._variant_list_for_locus_of_interest]
+        target_intensity_data_preprocessed = sklearn.preprocessing.StandardScaler(with_std=False).fit_transform(
+            target_intensity_data_sliced)
         self._correction_model.fit(
-            self._principal_components, target_intensity_data.loc[:, self._variant_list_for_locus_of_interest])
+            self._batch_effects, target_intensity_data_preprocessed)
         # Write intensities of locus of interest corrected for batch effects.
-        self._corrected = self._correct_batch_effects(target_intensity_data, self._principal_components)
+        self._corrected = self._correct_batch_effects(target_intensity_data_sliced, self._batch_effects)
         return
+    def _scale_fit_transform(self, reference_intensity_data):
+        return pd.DataFrame(
+            self._standardize_scaler.fit_transform(
+                reference_intensity_data),
+            columns=reference_intensity_data.columns,
+            index=reference_intensity_data.index)
+    def _scale_transform(self, reference_intensity_data):
+        return pd.DataFrame(
+            self._standardize_scaler.transform(
+                reference_intensity_data),
+            columns=reference_intensity_data.columns,
+            index=reference_intensity_data.index)
+    def _pca_fit_transform(self, intensity_data_preprocessed):
+        if self._pca_over_samples:
+            self._pca = self._pca.fit(intensity_data_preprocessed)
+            self._batch_effects = pd.DataFrame(
+                self._pca.components_.T,
+                index=intensity_data_preprocessed.columns)
+        else:
+            self._batch_effects = pd.DataFrame(
+                self._pca.fit_transform(intensity_data_preprocessed),
+                index=intensity_data_preprocessed.index)
+    def _pca_transform(self, intensity_data_preprocessed):
+        if self._pca_over_samples:
+            self._batch_effects = pd.DataFrame(
+                self._pca.components_,
+                index=intensity_data_preprocessed.index)
+        else:
+            self._batch_effects = pd.DataFrame(
+                self._pca.transform(intensity_data_preprocessed),
+                index=intensity_data_preprocessed.index)
     def variant_indices(self, intensity_data):
         return np.logical_and(
             self.indices_not_in_locus_of_interest(intensity_data),
             ~intensity_data.isnull().any(axis=0))
-    def correct_intensities(self, intensity_data):
+    def correct_intensities(self, reference_intensity_data, target_intensity_data):
+        reference_intensity_data_sliced = (
+            reference_intensity_data.loc[:, self.variant_indices(reference_intensity_data)])
         if self._scale:
-            intensity_data_preprocessed = pd.DataFrame(
-                self._standardize_scaler.transform(intensity_data.loc[:,
-                                                   self.indices_not_in_locus_of_interest(intensity_data)]),
-                columns=intensity_data.columns[self.indices_not_in_locus_of_interest(intensity_data)],
-                index=intensity_data.index)
+            if self._pca_over_samples:
+                reference_intensity_data_sliced = reference_intensity_data_sliced.T
+            intensity_data_preprocessed = self._scale_transform(reference_intensity_data_sliced)
         else:
-            intensity_data_preprocessed = intensity_data.loc[:,
-                                          self.indices_not_in_locus_of_interest(intensity_data)]
+            intensity_data_preprocessed = reference_intensity_data_sliced
+        print(intensity_data_preprocessed)
         # Get batch effects by calculating principal components
-        principal_components = pd.DataFrame(
-            self._pca.transform(intensity_data_preprocessed),
-            index=intensity_data.index)
+        self._pca_transform(
+            intensity_data_preprocessed)
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
-        corrected_intensities = self._correct_batch_effects(intensity_data, principal_components)
-        return corrected_intensities
+        target_intensity_data_sliced = target_intensity_data.loc[:, self._variant_list_for_locus_of_interest]
+        residual_intensities = self._correct_batch_effects(target_intensity_data_sliced, self._batch_effects)
+        return residual_intensities
     def indices_not_in_locus_of_interest(self, intensity_data):
         return ~intensity_data.columns.isin(
             self._variant_list_for_locus_of_interest)
-    def _correct_batch_effects(self, intensity_data, principal_components):
+    def _correct_batch_effects(self, target_intensity_data_sliced, principal_components):
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
         predicted_batch_effects_on_locus_of_interest = self._correction_model.predict(
             principal_components)
+        print(predicted_batch_effects_on_locus_of_interest.shape)
+        print(np.mean(predicted_batch_effects_on_locus_of_interest, axis=None))
         # We can correct the locus of interest by subtracting the predicted batch effects
         # from the raw intensity data.
-        corrected_intensities = intensity_data[self._variant_list_for_locus_of_interest] - \
-                                predicted_batch_effects_on_locus_of_interest
-        return corrected_intensities
+        residual_intensities = (
+                target_intensity_data_sliced - predicted_batch_effects_on_locus_of_interest)
+        return residual_intensities
     def write_output(self, path):
         pickle.dump(self, open(
             ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
-        self._principal_components.to_csv(
+        self._batch_effects.to_csv(
             ".".join([path, "intensity_correction", "pcs", "csv", "gz"]))
-        self._pca.explained_variance_.to_csv(
+        pd.DataFrame(self._pca.explained_variance_).to_csv(
             ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"]))
         self._corrected.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
@@ -672,14 +752,9 @@ def main(argv=None):
         # Get the intersect between the variants that are in the manifest and the locus of interest
         variants_in_locus = manifest_ranges.intersect(locus_ranges)
 
-        variants_in_locus_extended = (pyranges.concat([
-            locus_ranges[[]].k_nearest(
-                manifest_ranges, how="downstream", overlap=True,
-                k=(args.window + len(variants_in_locus))),
-            locus_ranges[[]].k_nearest(
-                manifest_ranges, how="upstream", overlap=False,
-                k=args.window)])
-            .new_position("swap"))[["Chromosome", "Start", "End", "Name", "Distance"]]
+        window_from_locus = args.window
+
+        variants_in_locus_extended = window_from_locus.get_variants(locus_ranges, manifest_ranges)
 
         manifest_ranges_locus_excluded = (
                 pd.merge(manifest_ranges.as_df(), variants_in_locus.as_df(),
@@ -767,10 +842,16 @@ def main(argv=None):
         # intensity_matrix.to_csv(
         #     ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
         #     sep="\t", index_label='variant')
+        intensity_correction_parameters["regression_fit_intercept"] = True
 
         # Do correction of intensities
-        intensity_correction = IntensityCorrection(variants_in_locus.Name, **intensity_correction_parameters)
-        intensity_correction.fit(intensity_matrix.T)
+        intensity_correction = IntensityCorrection(
+            variants_in_locus.Name,
+            pca_n_components=50, pca_over_samples=True,
+            **intensity_correction_parameters)
+        intensity_correction.fit(
+            reference_intensity_data=intensity_matrix.T,
+            target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
         intensity_correction.write_output(args.out)
