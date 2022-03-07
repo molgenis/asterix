@@ -66,12 +66,12 @@ class GenomicWindow:
         self.window = window
     def get_variants(self, locus_ranges, manifest_ranges):
         if self.unit == "variants":
-            return pd.concat([
+            return pyranges.concat([
                 self.get_n_variants(locus_ranges, manifest_ranges),
-                manifest_ranges.intersect(locus_ranges)])
+                manifest_ranges.intersect(locus_ranges)[["Chromosome", "Start", "End", "Name"]]])
         else:
             return manifest_ranges.intersect(
-                locus_ranges.extend(self.get_window("bp")))
+                locus_ranges.extend(int(self.get_window("bp"))))[["Chromosome", "Start", "End", "Name"]]
     def get_n_variants(self, locus_ranges, manifest_ranges):
         return (pyranges.concat([
             locus_ranges[[]].k_nearest(
@@ -79,7 +79,8 @@ class GenomicWindow:
                 k=self.window),
             locus_ranges[[]].k_nearest(
                 manifest_ranges, how="upstream", overlap=False,
-                k=self.window)]))
+                k=self.window)])
+            .new_position("swap")[["Chromosome", "Start", "End", "Name"]])
     @classmethod
     def from_string(cls, window_as_string):
         regex_match = re.fullmatch(r"(\d+)(\w+)?", window_as_string)
@@ -741,7 +742,7 @@ def main(argv=None):
 
         # Read locus of interest
         locus_of_interest = pd.read_csv(
-            args.locus, index_col=False,
+            args.bed_file, index_col=False,
             names=("Chromosome", "Start", "End", "Name"),
             dtype={"Chromosome": str},
             sep="\t")
