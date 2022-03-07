@@ -785,13 +785,13 @@ def main(argv=None):
         # Read locus of interest
         variants_in_locus = pd.read_csv(
             "{}.locus.bed".format(args.variants_prefix), index_col=False,
-            names=("Chromosome", "Start", "End", "Name", "Distance"),
+            names=("Chromosome", "Start", "End", "Name"),
             dtype={"Chromosome": str},
             sep="\t")
 
     # Convert the locus of interest to a pyranges object
     variants_to_read = pyranges.concat([
-        pyranges.PyRanges(variants_in_locus.drop("Distance", axis=1)),
+        pyranges.PyRanges(variants_in_locus),
         pyranges.PyRanges(sampled_corrective_variants)])
 
     variants_to_read = variants_to_read[~variants_to_read.Name.duplicated()]
