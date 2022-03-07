@@ -2,4 +2,4 @@ base:
   value: "R"
 batch correction:
   pca_scaling: true
-  regression_fit_intercept: false
+  regression_fit_intercept: true
