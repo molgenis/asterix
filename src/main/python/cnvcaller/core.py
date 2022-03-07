@@ -789,6 +789,8 @@ def main(argv=None):
             dtype={"Chromosome": str},
             sep="\t")
 
+    print(pyranges.PyRanges(variants_in_locus))
+
     # Convert the locus of interest to a pyranges object
     variants_to_read = pyranges.concat([
         pyranges.PyRanges(variants_in_locus),
