@@ -850,7 +850,6 @@ def main(argv=None):
         # Do correction of intensities
         intensity_correction = IntensityCorrection(
             variants_in_locus.Name,
-            pca_n_components=50, pca_over_samples=True,
             **intensity_correction_parameters)
         intensity_correction.fit(
             reference_intensity_data=intensity_matrix.T,
