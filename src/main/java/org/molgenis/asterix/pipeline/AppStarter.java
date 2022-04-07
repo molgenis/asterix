@@ -16,7 +16,7 @@ public class AppStarter {
      * application entry
      * @param args the command line arguments
      */
-    public static void main(String[] args){
+    public static void main(String[] args) {
         AppStarter app = new AppStarter();
         app.start(args);
     }
@@ -30,21 +30,18 @@ public class AppStarter {
      * start the application
      * @param args the command line arguments
      */
-    public void start(String[] args){
+    public void start(String[] args) {
         try {
             //load config
             ConfigProvider configProvider = ConfigProvider.getInstance();
             configProvider.loadCliArguments(args);
             //check for help request by user
-            if(!configProvider.isRequestedHelp()){
+            if(!configProvider.isRequestedHelp()) {
                 Pipeline pipeline = new Pipeline();
                 pipeline.doPipeline();
             }
         }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-        catch(ParseException e){
+        catch (IOException | ParseException e) {
             e.printStackTrace();
         }
     }

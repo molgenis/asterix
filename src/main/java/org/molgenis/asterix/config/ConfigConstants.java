@@ -49,7 +49,7 @@ public class ConfigConstants {
     protected static final String OPTION_HELP = "help";
 
     //private constructor so Object cannot be created
-    private ConfigConstants(){
+    private ConfigConstants() {
 
     }
 }
