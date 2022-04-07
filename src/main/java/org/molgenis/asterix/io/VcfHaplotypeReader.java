@@ -1,0 +1,132 @@
+package org.molgenis.asterix.io;
+
+import org.apache.commons.io.FileUtils;
+import org.molgenis.asterix.model.PgxGene;
+import org.molgenis.asterix.model.PgxSample;
+import org.molgenis.asterix.model.Snp;
+import org.molgenis.genotype.Sample;
+import org.molgenis.genotype.variant.GeneticVariant;
+import org.molgenis.genotype.vcf.VcfGenotypeData;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
+
+/**
+ * Implementation of a Haplotype reader for phased VCF files.
+ */
+public class VcfHaplotypeReader implements HaplotypeReader {
+
+    private Map<String, PgxSample> samples;
+    private List<String> sampleNames;
+    private String haplotypeFolder;
+
+    int REFERENCE_ALLELE_INDEX = 0;
+    int HAPLOTYPE_0_INDEX = 0;
+    int HAPLOTYPE_1_INDEX = 1;
+
+    public VcfHaplotypeReader(String haplotypeFolder) {
+        this.haplotypeFolder = haplotypeFolder;
+        samples = new HashMap<>();
+        sampleNames = new ArrayList<>();
+    }
+
+    @Override
+    public void readHaplotypes(Collection<PgxGene> genes) throws IOException {
+        File[] phasedVcfFiles = FileUtils.listFiles(new File(haplotypeFolder), new String[]{"vcf.gz"}, true).toArray(new File[0]);
+        for (File phasedVcfFile : phasedVcfFiles) {
+            System.out.println("Reading genotype file " + phasedVcfFile.getName());
+            VcfGenotypeData genotypeData = new VcfGenotypeData(phasedVcfFile, 100, 0.0);
+            processSamples(genotypeData);
+
+            for (PgxGene pgxGene : genes) {
+                if (hasVariantsInRange(pgxGene, genotypeData)) {
+                    Collection<Snp> pgxSnps = pgxGene.getWildType().getSnps().values();
+                    int presentCount = 0;
+                    int i = 0;
+                    for (Snp pgxSnp :pgxSnps) {
+                        i++;
+                        System.out.print("Processing PGx gene " + pgxGene.getName() + " SNP " + i + "/" + pgxSnps.size() + "\r");
+                        GeneticVariant snp = genotypeData.getSnpVariantByPos(Integer.toString(pgxSnp.getChr()), pgxSnp.getPos());
+                        if (snp != null) {
+                            parseSnp(snp, pgxSnp);
+                            presentCount++;
+                        } else {
+                            // TODO: remove snp from gene
+                        }
+                    }
+                    System.out.println(presentCount + "/" + pgxGene.getWildType().getSnps().values().size() + " SNPs present");
+                }
+            }
+        }
+    }
+
+    @Override
+    public void readHaplotypes() throws IOException {
+
+    }
+
+    @Override
+    public Map<String, PgxSample> getSamples() {
+        return samples;
+    }
+
+    private void processSamples(VcfGenotypeData vcfGenotypeData) {
+        if (samples.isEmpty()) {
+            for (Sample sample : vcfGenotypeData.getSamples()) {
+                if (!samples.containsKey(sample.getId())) {
+                    samples.put(sample.getId(), new PgxSample(sample.getId()));
+                    sampleNames.add(sample.getId());
+                } else {
+                    throw new RuntimeException("Duplicate sample in genotype file");
+                }
+            }
+        } else if (!isEqualSamples(vcfGenotypeData.getSamples())) {
+            throw new RuntimeException("Samples are not equal across genotype files");
+        }
+    }
+
+    private void parseSnp(GeneticVariant variant, Snp pgxSnp) {
+        Snp referenceSnp = new Snp();
+        referenceSnp.setId(pgxSnp.getId());
+        referenceSnp.setChr(pgxSnp.getChr());
+        referenceSnp.setPos(pgxSnp.getPos());
+        referenceSnp.setReferenceAllele(variant.getRefAllele().getAlleleAsString());
+        referenceSnp.setMinorAllele(variant.getMinorAllele().getAlleleAsString());
+        referenceSnp.setVariantAllele(variant.getRefAllele().getAlleleAsString());
+
+        Snp minorSnp = referenceSnp.copySnp(referenceSnp);
+        minorSnp.setVariantAllele(variant.getMinorAllele().getAlleleAsString());
+
+        double[][][] sampleGenotypeProbabilitiesPhased = variant.getSampleGenotypeProbabilitiesPhased();
+        for (int i = 0; i < sampleGenotypeProbabilitiesPhased.length; i++) {
+            String currentSampleId = sampleNames.get(i);
+            PgxSample currentSample = samples.get(currentSampleId);
+
+            double[][] sample = sampleGenotypeProbabilitiesPhased[i];
+
+            // TODO: Should implement min max for probability
+            double probabilityReferenceAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX];
+            if (probabilityReferenceAlleleHaplotype0 > 0.5)
+                currentSample.getHaplotype0().put(referenceSnp.getId(), referenceSnp);
+            else currentSample.getHaplotype0().put(minorSnp.getId(), minorSnp);
+
+            double probabilityReferenceAlleleHaplotype1 = sample[HAPLOTYPE_1_INDEX][REFERENCE_ALLELE_INDEX];
+            if (probabilityReferenceAlleleHaplotype1 > 0.5)
+                currentSample.getHaplotype1().put(referenceSnp.getId(), referenceSnp);
+            else currentSample.getHaplotype1().put(minorSnp.getId(), minorSnp);
+        }
+    }
+
+    private boolean hasVariantsInRange(PgxGene gene, VcfGenotypeData genotypeData) {
+        String chr = Integer.toString(gene.getChr());
+        int start = gene.getStartPos();
+        int end = gene.getEndPos();
+        return genotypeData.getVariantsByRange(chr, start, end).iterator().hasNext();
+    }
+
+    private boolean isEqualSamples(List<Sample> samples) {
+        return true;
+    }
+
+}

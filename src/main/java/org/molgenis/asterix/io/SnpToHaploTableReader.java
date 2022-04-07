@@ -1,0 +1,86 @@
+package org.molgenis.asterix.io;
+
+import org.molgenis.asterix.model.PgxGene;
+import org.molgenis.asterix.model.PgxHaplotype;
+import org.molgenis.asterix.model.Snp;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.SortedMap;
+import java.util.TreeMap;
+
+public class SnpToHaploTableReader {
+
+    public SnpToHaploTableReader(String snpToHaplotypeTableDir) {
+        this.haplotypeTableDir = snpToHaplotypeTableDir;
+    }
+
+    private String haplotypeTableDir;
+    private SortedMap<String, PgxGene> genes = new TreeMap<>();
+
+    public void readSnpHaploTables() throws IOException {
+        File[] snpHaploTables = new File(haplotypeTableDir).listFiles(file -> !file.isHidden());
+
+        for (File snpHaploTable : snpHaploTables) {
+            try (BufferedReader br = new BufferedReader(new FileReader(snpHaploTable))) {
+                br.readLine();
+                String line = br.readLine();
+
+                String[] splitLine = line.split("\t");
+                String geneName = splitLine[1];
+
+                PgxGene pgxGene = new PgxGene(geneName);
+                pgxGene.setChr(Integer.parseInt(splitLine[3]));
+
+                while (line != null) {
+                    addSnpToHaplotype(pgxGene, line);
+                    line = br.readLine();
+                }
+                genes.put(pgxGene.getName(), pgxGene);
+            }
+        }
+    }
+
+    private void addSnpToHaplotype(PgxGene gene, String line) {
+        String[] splitLine = line.split("\t");
+        if (splitLine.length != 9) {
+            throw new IllegalArgumentException("Invalid number of lines in translation table");
+        }
+
+        String haplotypeName = splitLine[0];
+
+        Snp snp = new Snp();
+        snp.setId(splitLine[2]);
+        snp.setChr(Integer.parseInt(splitLine[3]));
+        snp.setPos(Integer.parseInt(splitLine[4]));
+        snp.setReferenceAllele(splitLine[6]);
+        snp.setType(splitLine[8]);
+
+        if (snp.getPos() > gene.getEndPos()) gene.setEndPos(snp.getPos());
+        if (snp.getPos() < gene.getStartPos()) gene.setStartPos(snp.getPos());
+
+        if (splitLine[7].equals("-")) snp.setVariantAllele(splitLine[6]);
+        else snp.setVariantAllele(splitLine[7]);
+
+        // TODO: Is a wild type haplotype really necessary? wild type is always the ref allele
+        if (!gene.getWildType().hasSnp(snp)) {
+            Snp wildTypeSnp = snp.copySnp(snp);
+            wildTypeSnp.setVariantAllele(wildTypeSnp.getReferenceAllele());
+            gene.getWildType().addSnp(wildTypeSnp);
+        }
+        if (gene.getPgxHaplotypes().containsKey(haplotypeName)) {
+            PgxHaplotype pgxHaplotype = gene.getPgxHaplotypes().get(haplotypeName);
+            pgxHaplotype.addSnp(snp);
+        } else {
+            PgxHaplotype pgxHaplotype = new PgxHaplotype(haplotypeName);
+            pgxHaplotype.addSnp(snp);
+            gene.getPgxHaplotypes().put(haplotypeName, pgxHaplotype);
+        }
+    }
+
+    public SortedMap<String, PgxGene> getGenes() {
+        return genes;
+    }
+}
