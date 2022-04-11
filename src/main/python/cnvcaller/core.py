@@ -108,7 +108,7 @@ class ArgumentParser:
         self.parser = self.create_argument_parser()
         self.add_command_choice_argument(self.parser)
         self.add_bead_pool_manifest_argument(self.parser)
-        self.add_sample_sheet_argument()
+        self.add_sample_list_argument()
         self.add_debug_parameter()
         self.add_config_parameter()
         self.add_out_argument(self.parser)
@@ -186,11 +186,12 @@ class ArgumentParser:
         parser = argparse.ArgumentParser(description="CNV-calling algorithm",
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         return parser
-    def add_sample_sheet_argument(self):
-        self.parser.add_argument('-s', '--sample-sheet', type=self.is_readable_file,
+    def add_sample_list_argument(self):
+        self.parser.add_argument('-s', '--sample-list', type=self.is_readable_file,
                                  required=True,
                                  default=None,
-                                 help="Samplesheet")
+                                 help="List of samples to include. This should be the list of samples that"
+                                      "passed quality control.")
     def add_final_report_path_argument(self, parser):
         parser.add_argument('-g', '--final-report-file-path', type=self.is_readable_file, required=True, default=None,
                             help="Path to where final report files are located")
@@ -736,7 +737,8 @@ def main(argv=None):
     manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
     # Read the sample sheet
-    sample_sheet = pd.read_csv(args.sample_sheet, sep=",")
+    sample_list = pd.read_csv(args.sample_list,
+                               sep=",", header=None, names=["Sample_ID"])
 
     if parser.is_action_requested(ArgumentParser.SubCommand.VARIANTS):
 
@@ -803,7 +805,7 @@ def main(argv=None):
         # Get intensity data
         intensity_data_reader = FinalReportGenotypeDataReader(
             args.final_report_file_path,
-            sample_sheet["Sample_ID"].values,
+            sample_list["Sample_ID"].values,
             variants_to_read.as_df())
 
         intensity_data = intensity_data_reader.read_intensity_data()
@@ -817,7 +819,7 @@ def main(argv=None):
         intensity_correction_parameters = args.config['batch correction']
 
         # Load intensity data
-        intensity_data_frame_reader = IntensityDataReader(sample_sheet["Sample_ID"])
+        intensity_data_frame_reader = IntensityDataReader(sample_list["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
         intensity_data_frame.loc[variants_in_locus.Name].to_csv(
