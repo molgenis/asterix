@@ -703,7 +703,7 @@ def sample_corrective_variants_proportionally(corrective_variant_path, manifest_
         downsampling_factor = grouped_data_frame.downsamplingFactor.unique() / max_downsampling_factor
         sampled_corrective_variants_list.append(grouped_data_frame
                                                 .sample(frac=float(downsampling_factor), replace=False))
-    return pd.concat(sampled_corrective_variants_list).loc[:,["Chromosome", "Start", "End", "Name"]]
+    return pyranges.PyRanges(pd.concat(sampled_corrective_variants_list).loc[:,["Chromosome", "Start", "End", "Name"]])
 
 
 # Main
@@ -769,7 +769,7 @@ def main(argv=None):
             args.corrective_variants, manifest_ranges_locus_excluded)
 
         # variants as pyranges object
-        sampled_corrective_variants.to_csv(
+        sampled_corrective_variants.as_df().to_csv(
             "{}.corrective.bed".format(args.out), index=False, sep="\t", header=False)
 
         variants_in_locus_extended.as_df().to_csv(
@@ -778,25 +778,25 @@ def main(argv=None):
     else:
 
         # Read locus of interest
-        sampled_corrective_variants = pd.read_csv(
+        sampled_corrective_variants = pyranges.PyRanges(pd.read_csv(
             "{}.corrective.bed".format(args.variants_prefix), index_col=False,
             names=("Chromosome", "Start", "End", "Name"),
             dtype={"Chromosome": str},
-            sep="\t")
+            sep="\t"))
 
         # Read locus of interest
-        variants_in_locus = pd.read_csv(
+        variants_in_locus = pyranges.PyRanges(pd.read_csv(
             "{}.locus.bed".format(args.variants_prefix), index_col=False,
             names=("Chromosome", "Start", "End", "Name"),
             dtype={"Chromosome": str},
-            sep="\t")
+            sep="\t"))
 
-    print(pyranges.PyRanges(variants_in_locus))
+    print(variants_in_locus)
 
     # Convert the locus of interest to a pyranges object
     variants_to_read = pyranges.concat([
-        pyranges.PyRanges(variants_in_locus),
-        pyranges.PyRanges(sampled_corrective_variants)])
+        variants_in_locus,
+        sampled_corrective_variants])
 
     variants_to_read = variants_to_read[~variants_to_read.Name.duplicated()]
 
