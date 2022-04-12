@@ -548,9 +548,9 @@ class FinalReportGenotypeDataReader:
         return pd.concat(data_array_list)
 
     def empty_dataframe(self):
-        return pd.DataFrame(columns=DEFAULT_FINAL_REPORT_COLS,
-                            dtype={"Sample ID": str, "SNP Name": str},
-                            index_col="SNP Name")
+        empty_sample_data_frame = pd.DataFrame(columns=DEFAULT_FINAL_REPORT_COLS, dtype={"Sample ID": str, "SNP Name": str})
+        empty_sample_data_frame.set_index('customer_ID', inplace = True)
+        return empty_sample_data_frame
 
     def _read_sample_intensities(self, buffer, columns):
         buffer.seek(0)
