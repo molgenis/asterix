@@ -462,6 +462,8 @@ class FinalReportGenotypeDataReader:
         Method that reads the intensity values from a final report file.
         :return: Data frame.
         """
+        data_frame = self.empty_dataframe()
+
         with open(self._path, self.get_reading_mode()) as buffer:
             part_buffer = list()
             for line in buffer:
