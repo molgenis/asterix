@@ -51,8 +51,8 @@ __description__ = "{} is a program developed and maintained by {}. " \
                                         __license__)
 
 # Constants
-DEFAULT_FINAL_REPORT_COLS = ["Sample ID", "SNP Name", "GType", "SNP",
-                             "X", "Y", "B Allele Freq", "Log R Ratio"]
+DEFAULT_FINAL_REPORT_COLS = {"Sample ID": 'str', "SNP Name": 'str', "GType": 'str', "SNP": 'str',
+                             "X": 'float', "Y": 'float', "B Allele Freq": 'float', "Log R Ratio": 'float'}
 AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
 
 
@@ -548,16 +548,20 @@ class FinalReportGenotypeDataReader:
         return pd.concat(data_array_list)
 
     def empty_dataframe(self):
-        empty_sample_data_frame = pd.DataFrame(columns=DEFAULT_FINAL_REPORT_COLS, dtype={"Sample ID": str, "SNP Name": str})
-        empty_sample_data_frame.set_index('customer_ID', inplace = True)
+        final_report_columns = DEFAULT_FINAL_REPORT_COLS.copy()
+        final_report_columns['R'] = 'float'
+
+        columns = {key: pd.Series(dtype=value) for key, value in final_report_columns.items()}
+        empty_sample_data_frame = pd.DataFrame(columns)
+        empty_sample_data_frame.set_index('SNP Name', inplace = True)
         return empty_sample_data_frame
 
     def _read_sample_intensities(self, buffer, columns):
         buffer.seek(0)
         sample_data_frame = pd.read_csv(buffer, names=columns,
                                         sep=self.sep,
-                                        usecols=DEFAULT_FINAL_REPORT_COLS,
-                                        dtype={"Sample ID": str, "SNP Name": str},
+                                        usecols=list(DEFAULT_FINAL_REPORT_COLS.keys()),
+                                        dtype=DEFAULT_FINAL_REPORT_COLS,
                                         index_col="SNP Name")
         sample_data_frame = sample_data_frame.loc[
                             self._variants_to_include.Name.to_numpy(), :]
