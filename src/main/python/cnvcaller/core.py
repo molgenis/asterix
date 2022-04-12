@@ -30,6 +30,7 @@ import sys
 import argparse
 import yaml
 import re
+import copy
 
 import numpy as np
 import pandas as pd
@@ -590,27 +591,43 @@ class IntensityCorrection:
         self._batch_effects = None
 
     def fit(self, reference_intensity_data, target_intensity_data):
+        # First prepare the reference intensity data.
+        # On this reference intensity data, we base the batch effects.
+
+        # Within the reference intensity data, we confine ourselves to the
+        # variants that are not in the locus of interest
         reference_intensity_data_sliced = (
-            reference_intensity_data.loc[:, self.variant_indices(reference_intensity_data)])
+            reference_intensity_data.loc[:, self.variant_indices_outside_locus_of_interest(
+                reference_intensity_data)])
+
+        # Now, if requested, we must scale the intensities of variants.
         if self._scale:
-            if self._pca_over_samples:
-                reference_intensity_data_sliced = reference_intensity_data_sliced.T
-            intensity_data_preprocessed = self._scale_fit_transform(reference_intensity_data_sliced)
+            # The intensity data matrix (transposed or not) we can center and scale.
+            intensity_data_preprocessed = self._scale_fit_transform(
+                reference_intensity_data_sliced)
         else:
             intensity_data_preprocessed = reference_intensity_data_sliced
+
+        # Now, if we should do a pca over the samples instead of
+        # over the columns (variants), we transpose the
+        # the intensity data frame.
+        if self._pca_over_samples:
+            intensity_data_preprocessed = intensity_data_preprocessed.T
+
         # Calculate the eigenvectors used to correct the correction variants.
         # These eigenvectors represent how to scale each variant in a sample
         # so that the result explaines covariability among the variants.
         # I.e., the projected principal components (PCs) explain batch effects.
         # We want to regress out these batch effects in the locus of interest.
         self._pca_fit_transform(intensity_data_preprocessed)
-        print(self._batch_effects)
         # The projected principal components explain batch effects.
         # We try to explain as much of the locus of interest using the PCs
         # The residuals can be used in further analyses.
-        target_intensity_data_sliced = target_intensity_data.loc[:, self._variant_list_for_locus_of_interest]
-        target_intensity_data_preprocessed = sklearn.preprocessing.StandardScaler(with_std=False).fit_transform(
-            target_intensity_data_sliced)
+        target_intensity_data_sliced = target_intensity_data.loc[
+                                       :, self._variant_list_for_locus_of_interest]
+        target_intensity_data_preprocessed = (sklearn.preprocessing.StandardScaler(with_std=False)
+            .fit_transform(
+            target_intensity_data_sliced))
         self._correction_model.fit(
             self._batch_effects, target_intensity_data_preprocessed)
         # Write intensities of locus of interest corrected for batch effects.
@@ -645,21 +662,21 @@ class IntensityCorrection:
     def _pca_transform(self, intensity_data_preprocessed):
         if self._pca_over_samples:
             self._batch_effects = pd.DataFrame(
-                self._pca.components_,
-                index=intensity_data_preprocessed.index)
+                self._pca.components_.T,
+                index=intensity_data_preprocessed.columns)
         else:
             self._batch_effects = pd.DataFrame(
                 self._pca.transform(intensity_data_preprocessed),
                 index=intensity_data_preprocessed.index)
 
-    def variant_indices(self, intensity_data):
+    def variant_indices_outside_locus_of_interest(self, intensity_data):
         return np.logical_and(
             self.indices_not_in_locus_of_interest(intensity_data),
             ~intensity_data.isnull().any(axis=0))
 
     def correct_intensities(self, reference_intensity_data, target_intensity_data):
         reference_intensity_data_sliced = (
-            reference_intensity_data.loc[:, self.variant_indices(reference_intensity_data)])
+            reference_intensity_data.loc[:, self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
         if self._scale:
             if self._pca_over_samples:
                 reference_intensity_data_sliced = reference_intensity_data_sliced.T
@@ -667,15 +684,20 @@ class IntensityCorrection:
         else:
             intensity_data_preprocessed = reference_intensity_data_sliced
         print(intensity_data_preprocessed)
+
         # Get batch effects by calculating principal components
         self._pca_transform(
             intensity_data_preprocessed)
+
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
-        target_intensity_data_sliced = target_intensity_data.loc[:, self._variant_list_for_locus_of_interest]
-        residual_intensities = self._correct_batch_effects(target_intensity_data_sliced, self._batch_effects)
+        target_intensity_data_sliced = target_intensity_data.loc[
+                                       :, self._variant_list_for_locus_of_interest]
+
+        residual_intensities = self._correct_batch_effects(
+            target_intensity_data_sliced, self._batch_effects)
         return residual_intensities
 
     def indices_not_in_locus_of_interest(self, intensity_data):
@@ -698,14 +720,23 @@ class IntensityCorrection:
         return residual_intensities
 
     def write_output(self, path):
-        pickle.dump(self, open(
-            ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
         self._batch_effects.to_csv(
             ".".join([path, "intensity_correction", "pcs", "csv", "gz"]))
-        pd.DataFrame(self._pca.explained_variance_).to_csv(
-            ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"]))
+
+        (pd.DataFrame(
+            {'explained_variance': self._pca.explained_variance_,
+             'explained_variance_ratio': self._pca.explained_variance_ratio_}).
+            to_csv(
+            ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"])))
+
         self._corrected.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
+
+        self_copy = copy.deepcopy(self)
+        self_copy._batch_effects = None
+        self_copy._corrected = None
+        pickle.dump(self_copy, open(
+            ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
 
     @classmethod
     def load_instance(cls, path):
