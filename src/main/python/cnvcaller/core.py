@@ -498,8 +498,8 @@ class FinalReportGenotypeDataReader:
         pass
 
     def _read_data(self, buffer):
-        data_array_list = list()
-        sample_list = list(self.empty_dataframe())
+        data_array_list = list(self.empty_dataframe())
+        sample_list = list()
         columns = pd.read_csv(io.StringIO(buffer.readline()), nrows=0, sep=self.sep).columns.to_list()
         sample_id_index = columns.index("Sample ID")
         sample_buffer = io.StringIO()
