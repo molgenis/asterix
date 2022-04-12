@@ -462,7 +462,7 @@ class FinalReportGenotypeDataReader:
         Method that reads the intensity values from a final report file.
         :return: Data frame.
         """
-        data_frame = self.empty_dataframe()
+        data_frame = self._empty_dataframe()
 
         with open(self._path, self.get_reading_mode()) as buffer:
             part_buffer = list()
@@ -498,7 +498,7 @@ class FinalReportGenotypeDataReader:
         pass
 
     def _read_data(self, buffer):
-        data_array_list = list(self.empty_dataframe())
+        data_array_list = list()
         sample_list = list()
         columns = pd.read_csv(io.StringIO(buffer.readline()), nrows=0, sep=self.sep).columns.to_list()
         sample_id_index = columns.index("Sample ID")
@@ -525,6 +525,7 @@ class FinalReportGenotypeDataReader:
                     sample_counter += 1
                 else:
                     print("Skipping sample since it is not in the sample list: {}".format(current_sample))
+                    data_array_list.append(self._empty_dataframe())
                 # Reset buffer
                 sample_buffer.truncate(0)
                 sample_buffer.seek(0)
@@ -547,7 +548,7 @@ class FinalReportGenotypeDataReader:
         #         self._line_counter)
         return pd.concat(data_array_list)
 
-    def empty_dataframe(self):
+    def _empty_dataframe(self):
         final_report_columns = DEFAULT_FINAL_REPORT_COLS.copy()
         final_report_columns['R'] = 'float'
 
