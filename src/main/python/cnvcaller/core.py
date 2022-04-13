@@ -341,6 +341,7 @@ class ArgumentParser:
                  self.add_variant_prefix_argument},
             self.SubCommand.CALL:
                 {self.add_staged_data_argument,
+                 self.add_variant_prefix_argument,
                  self.add_batch_weights_argument,
                  self.add_calling_cluster_weight_argument}}
         methods_to_run = set.union(*[sub_command_mapping.get(sub_command) for sub_command in self.sub_commands])
@@ -980,16 +981,9 @@ def main(argv=None):
         intensity_data_frame_reader = IntensityDataReader(sample_list["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
-        intensity_data_frame.loc[variants_in_locus.Name].to_csv(
-            ".".join([args.out, "intensity_data_frame", "csv.gz"]),
-            sep="\t", index_label='variant', compression='gzip')
-
         # Intensity matrix
         intensity_matrix = intensity_data_frame.pivot(
             columns="Sample ID", values=value_to_use)
-        intensity_matrix.to_csv(
-            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
-            sep="\t", index_label='variant')
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection.load_instance(args.out)
