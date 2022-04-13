@@ -732,6 +732,7 @@ class IntensityCorrection:
         self._corrected.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
 
+    def write_fit(self, path):
         self_copy = copy.deepcopy(self)
         self_copy._batch_effects = None
         self_copy._corrected = None
@@ -962,6 +963,7 @@ def main(argv=None):
 
         # Write output for intensity correction
         intensity_correction.write_output(args.out)
+        intensity_correction.write_fit(args.out)
 
     # if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
     #
