@@ -986,7 +986,7 @@ def main(argv=None):
             columns="Sample ID", values=value_to_use)
 
         # Do correction of intensities
-        intensity_correction = IntensityCorrection.load_instance(args.out)
+        intensity_correction = IntensityCorrection.load_instance(args.correction)
         intensity_correction.correct_intensities(
             reference_intensity_data=intensity_matrix.T,
             target_intensity_data=intensity_matrix.T)
