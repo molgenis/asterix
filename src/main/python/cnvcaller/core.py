@@ -556,7 +556,7 @@ class FinalReportGenotypeDataReader:
 
         columns = {key: pd.Series(dtype=value) for key, value in final_report_columns.items()}
         empty_sample_data_frame = pd.DataFrame(columns)
-        empty_sample_data_frame.set_index('SNP Name', inplace = True)
+        empty_sample_data_frame.set_index('SNP Name', inplace=True)
         return empty_sample_data_frame
 
     def _read_sample_intensities(self, buffer, columns):
@@ -598,8 +598,8 @@ class IntensityCorrection:
         # Within the reference intensity data, we confine ourselves to the
         # variants that are not in the locus of interest
         reference_intensity_data_sliced = (
-            reference_intensity_data.loc[:, self.variant_indices_outside_locus_of_interest(
-                reference_intensity_data)])
+            reference_intensity_data.loc[:,
+            self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
 
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
@@ -634,6 +634,44 @@ class IntensityCorrection:
         # Write intensities of locus of interest corrected for batch effects.
         self._corrected = self._correct_batch_effects(target_intensity_data_sliced, self._batch_effects)
         return
+
+    def correct_intensities(self, reference_intensity_data, target_intensity_data):
+        # First prepare the reference intensity data.
+        # On this reference intensity data, we base the batch effects.
+
+        # Within the reference intensity data, we confine ourselves to the
+        # variants that are not in the locus of interest
+        reference_intensity_data_sliced = (
+            reference_intensity_data.loc[:,
+            self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
+
+        # Now, if requested, we must scale the intensities of variants.
+        if self._scale:
+            intensity_data_preprocessed = self._scale_transform(
+                reference_intensity_data_sliced)
+        else:
+            intensity_data_preprocessed = reference_intensity_data_sliced
+
+        # Now, if we should do a pca over the samples instead of
+        # over the columns (variants), we transpose the
+        # the intensity data frame.
+        if self._pca_over_samples:
+            intensity_data_preprocessed = intensity_data_preprocessed.T
+
+        # Get batch effects by calculating principal components
+        self._pca_transform(
+            intensity_data_preprocessed)
+
+        # The principal components depict batch effects.
+        # Here, we predict the batch effects on the locus of interest.
+        # Using the predicted batch effects, we can correct the locus of interest for the
+        # expected batch effects.
+        target_intensity_data_sliced = target_intensity_data.loc[
+                                       :, self._variant_list_for_locus_of_interest]
+
+        residual_intensities = self._correct_batch_effects(
+            target_intensity_data_sliced, self._batch_effects)
+        return residual_intensities
 
     def _scale_fit_transform(self, reference_intensity_data):
         return pd.DataFrame(
@@ -674,32 +712,6 @@ class IntensityCorrection:
         return np.logical_and(
             self.indices_not_in_locus_of_interest(intensity_data),
             ~intensity_data.isnull().any(axis=0))
-
-    def correct_intensities(self, reference_intensity_data, target_intensity_data):
-        reference_intensity_data_sliced = (
-            reference_intensity_data.loc[:, self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
-        if self._scale:
-            if self._pca_over_samples:
-                reference_intensity_data_sliced = reference_intensity_data_sliced.T
-            intensity_data_preprocessed = self._scale_transform(reference_intensity_data_sliced)
-        else:
-            intensity_data_preprocessed = reference_intensity_data_sliced
-        print(intensity_data_preprocessed)
-
-        # Get batch effects by calculating principal components
-        self._pca_transform(
-            intensity_data_preprocessed)
-
-        # The principal components depict batch effects.
-        # Here, we predict the batch effects on the locus of interest.
-        # Using the predicted batch effects, we can correct the locus of interest for the
-        # expected batch effects.
-        target_intensity_data_sliced = target_intensity_data.loc[
-                                       :, self._variant_list_for_locus_of_interest]
-
-        residual_intensities = self._correct_batch_effects(
-            target_intensity_data_sliced, self._batch_effects)
-        return residual_intensities
 
     def indices_not_in_locus_of_interest(self, intensity_data):
         return ~intensity_data.columns.isin(
