@@ -588,6 +588,7 @@ class IntensityCorrection:
         self._correction_model = sklearn.linear_model.LinearRegression(
             fit_intercept=regression_fit_intercept)
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
+        self._variant_names_fit = None
         self._corrected = None
         self._batch_effects = None
     def fit(self, reference_intensity_data, target_intensity_data):
@@ -598,6 +599,8 @@ class IntensityCorrection:
         reference_intensity_data_sliced = (
             reference_intensity_data.loc[:,
             self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
+        # Set the variant names we create a fit for.
+        self._variant_names_fit = reference_intensity_data_sliced.columns.values()
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
             # The intensity data matrix (transposed or not) we can center and scale.
@@ -686,7 +689,7 @@ class IntensityCorrection:
         if self._pca_over_samples:
             self._batch_effects = pd.DataFrame(
                 self._pca.components_.T,
-                index=intensity_data_preprocessed.columns)
+                index=self._variant_names_fit)
         else:
             self._batch_effects = pd.DataFrame(
                 self._pca.transform(intensity_data_preprocessed),
@@ -738,7 +741,7 @@ class IntensityCorrection:
         # marking each sample that is outside of the mean -/+ x*sd
     def variants_in_scaler_fit(self, intensity_data):
         return np.logical_and(
-            intensity_data.columns.isin(self._standardize_scaler.get_feature_names_out()),
+            intensity_data.columns.isin(self._variant_names_fit),
             ~intensity_data.isnull().any(axis=0))
 
 # Functions
