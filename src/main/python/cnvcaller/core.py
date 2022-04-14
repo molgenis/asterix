@@ -600,7 +600,7 @@ class IntensityCorrection:
             reference_intensity_data.loc[:,
             self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
         # Set the variant names we create a fit for.
-        self._variant_names_fit = reference_intensity_data_sliced.columns.values()
+        self._variant_names_fit = reference_intensity_data_sliced.columns.values
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
             # The intensity data matrix (transposed or not) we can center and scale.
