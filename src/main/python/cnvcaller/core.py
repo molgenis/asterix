@@ -590,17 +590,14 @@ class IntensityCorrection:
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
         self._corrected = None
         self._batch_effects = None
-
     def fit(self, reference_intensity_data, target_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
-
         # Within the reference intensity data, we confine ourselves to the
         # variants that are not in the locus of interest
         reference_intensity_data_sliced = (
             reference_intensity_data.loc[:,
             self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
-
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
             # The intensity data matrix (transposed or not) we can center and scale.
@@ -608,13 +605,11 @@ class IntensityCorrection:
                 reference_intensity_data_sliced)
         else:
             intensity_data_preprocessed = reference_intensity_data_sliced
-
         # Now, if we should do a pca over the samples instead of
         # over the columns (variants), we transpose the
         # the intensity data frame.
         if self._pca_over_samples:
             intensity_data_preprocessed = intensity_data_preprocessed.T
-
         # Calculate the eigenvectors used to correct the correction variants.
         # These eigenvectors represent how to scale each variant in a sample
         # so that the result explaines covariability among the variants.
@@ -634,61 +629,49 @@ class IntensityCorrection:
         # Write intensities of locus of interest corrected for batch effects.
         self._corrected = self._correct_batch_effects(target_intensity_data_sliced, self._batch_effects)
         return
-
     def correct_intensities(self, reference_intensity_data, target_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
-
         # Within the reference intensity data, we confine ourselves to the
         # variants that are not in the locus of interest
         reference_intensity_data_sliced = (
             reference_intensity_data.loc[:,
-            self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
-
-        print(reference_intensity_data_sliced)
-
+            self.variants_in_scaler_fit(reference_intensity_data)])
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
             intensity_data_preprocessed = self._scale_transform(
                 reference_intensity_data_sliced)
         else:
             intensity_data_preprocessed = reference_intensity_data_sliced
-
         # Now, if we should do a pca over the samples instead of
         # over the columns (variants), we transpose the
         # the intensity data frame.
         if self._pca_over_samples:
             intensity_data_preprocessed = intensity_data_preprocessed.T
-
         # Get batch effects by calculating principal components
         self._pca_transform(
             intensity_data_preprocessed)
-
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._variant_list_for_locus_of_interest]
-
         residual_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, self._batch_effects)
         return residual_intensities
-
     def _scale_fit_transform(self, reference_intensity_data):
         return pd.DataFrame(
             self._standardize_scaler.fit_transform(
                 reference_intensity_data),
             columns=reference_intensity_data.columns,
             index=reference_intensity_data.index)
-
     def _scale_transform(self, reference_intensity_data):
         return pd.DataFrame(
             self._standardize_scaler.transform(
                 reference_intensity_data),
             columns=reference_intensity_data.columns,
             index=reference_intensity_data.index)
-
     def _pca_fit_transform(self, intensity_data_preprocessed):
         if self._pca_over_samples:
             self._pca = self._pca.fit(intensity_data_preprocessed)
@@ -699,7 +682,6 @@ class IntensityCorrection:
             self._batch_effects = pd.DataFrame(
                 self._pca.fit_transform(intensity_data_preprocessed),
                 index=intensity_data_preprocessed.index)
-
     def _pca_transform(self, intensity_data_preprocessed):
         if self._pca_over_samples:
             self._batch_effects = pd.DataFrame(
@@ -709,16 +691,13 @@ class IntensityCorrection:
             self._batch_effects = pd.DataFrame(
                 self._pca.transform(intensity_data_preprocessed),
                 index=intensity_data_preprocessed.index)
-
     def variant_indices_outside_locus_of_interest(self, intensity_data):
         return np.logical_and(
             self.indices_not_in_locus_of_interest(intensity_data),
             ~intensity_data.isnull().any(axis=0))
-
     def indices_not_in_locus_of_interest(self, intensity_data):
         return ~intensity_data.columns.isin(
             self._variant_list_for_locus_of_interest)
-
     def _correct_batch_effects(self, target_intensity_data_sliced, principal_components):
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
@@ -733,37 +712,34 @@ class IntensityCorrection:
         residual_intensities = (
                 target_intensity_data_sliced - predicted_batch_effects_on_locus_of_interest)
         return residual_intensities
-
     def write_output(self, path):
         self._batch_effects.to_csv(
             ".".join([path, "intensity_correction", "pcs", "csv", "gz"]))
-
         (pd.DataFrame(
             {'explained_variance': self._pca.explained_variance_,
              'explained_variance_ratio': self._pca.explained_variance_ratio_}).
             to_csv(
             ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"])))
-
         self._corrected.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
-
     def write_fit(self, path):
         self_copy = copy.deepcopy(self)
         self_copy._batch_effects = None
         self_copy._corrected = None
         pickle.dump(self_copy, open(
             ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
-
     @classmethod
     def load_instance(cls, path):
         return pickle.load(open(
             ".".join([path, "intensity_correction", "mod", "pkl"]), "rb"))
-
     def outliers(self):
         raise NotImplementedError()
         # Loop through all requested principal components,
         # marking each sample that is outside of the mean -/+ x*sd
-
+    def variants_in_scaler_fit(self, intensity_data):
+        return np.logical_and(
+            intensity_data.columns.isin(self._standardize_scaler.get_feature_names_out()),
+            ~intensity_data.isnull().any(axis=0))
 
 # Functions
 def calculate_downsampling_factor(grouped_data_frame, N):
