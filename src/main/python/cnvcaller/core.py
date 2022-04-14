@@ -645,6 +645,8 @@ class IntensityCorrection:
             reference_intensity_data.loc[:,
             self.variant_indices_outside_locus_of_interest(reference_intensity_data)])
 
+        print(reference_intensity_data_sliced)
+
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
             intensity_data_preprocessed = self._scale_transform(
@@ -857,8 +859,9 @@ def main(argv=None):
     manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
     # Read the sample sheet
-    sample_list = pd.read_csv(args.sample_list,
-                              sep=",", header=None, names=["Sample_ID"])
+    sample_list = pd.read_csv(
+        args.sample_list, sep=",", header=None, names=["Sample_ID"],
+        dtype={"Sample_ID": str})
 
     if parser.is_action_requested(ArgumentParser.SubCommand.VARIANTS):
 
