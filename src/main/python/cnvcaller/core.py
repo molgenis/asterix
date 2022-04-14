@@ -358,7 +358,7 @@ class ArgumentParser:
 
     def add_batch_weights_argument(self, parser):
         parser.add_argument('-C', '--correction', type=self.is_readable_dir,
-                            required=True, nargs='+', default=None,
+                            required=True, default=None,
                             help="path where batch correction weights, and corrected data are stored."
                                  "output of the batch weighting step")
 
