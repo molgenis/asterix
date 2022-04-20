@@ -688,18 +688,17 @@ class IntensityCorrection:
                 target_intensity_data_sliced
                 - predicted_batch_effects_in_locus_of_interest)
         return residual_intensities
-    def write_output(self, path):
+    def write_output(self, path, corrected_intensities):
+        corrected_intensities.to_csv(
+            ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
+    def write_fit(self, path):
+        pickle.dump(self, open(
+            ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
         self._pca_fit.to_csv(
             ".".join([path, "intensity_correction", "pca", "csv", "gz"]))
         self._pca_explained_variance_dataframe.to_csv(
             ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"]))
-        self._corrected.to_csv(
-            ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
-    def write_fit(self, path):
-        self_copy = copy.deepcopy(self)
-        self_copy._corrected = None
-        pickle.dump(self_copy, open(
-            ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
+
     @classmethod
     def load_instance(cls, path):
         return pickle.load(open(
@@ -920,12 +919,12 @@ def main(argv=None):
         intensity_correction = IntensityCorrection(
             variants_in_locus.Name,
             **intensity_correction_parameters)
-        intensity_correction.fit(
+        corrected_intensities = intensity_correction.fit(
             reference_intensity_data=intensity_matrix.T,
             target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
-        intensity_correction.write_output(args.out)
+        intensity_correction.write_output(args.out, corrected_intensities)
         intensity_correction.write_fit(args.out)
 
     # if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
@@ -949,12 +948,12 @@ def main(argv=None):
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection.load_instance(args.correction)
-        intensity_correction.correct_intensities(
+        corrected_intensities = intensity_correction.correct_intensities(
             reference_intensity_data=intensity_matrix.T,
             target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
-        intensity_correction.write_output(args.out)
+        intensity_correction.write_output(args.out, corrected_intensities)
 
     # args.
 
