@@ -747,7 +747,7 @@ class IntensityCorrection:
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
         predicted_batch_effects_in_locus_of_interest = self._correction_model.predict(
-            principal_components)[:, self._target_variants.isin(target_intensity_data_sliced.columns)]
+            principal_components)
         # We can correct the locus of interest by subtracting the predicted batch effects
         # from the raw intensity data.
         residual_intensities = (
