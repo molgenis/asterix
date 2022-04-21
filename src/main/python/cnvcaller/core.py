@@ -585,7 +585,29 @@ class IntensityCorrection:
         self._pca_fit = None
         self._pca_explained_variance_dataframe = None
 
-    def fit(self, reference_intensity_data, target_intensity_data):
+    def fit(self, batch_effects, target_intensity_data):
+        # The projected principal components explain batch effects.
+        # We try to explain as much of the locus of interest using the PCs
+        # The residuals can be used in further analyses.
+        target_intensity_data_sliced = target_intensity_data.loc[
+                                       :, self._target_variants]
+
+        target_intensity_data_preprocessed = pd.DataFrame(
+            sklearn.preprocessing.StandardScaler(with_std=False)
+            .fit_transform(target_intensity_data_sliced),
+            columns=target_intensity_data_sliced.columns,
+            index=target_intensity_data_sliced.index
+        )
+
+        # Fit the correction model
+        self._correction_model.fit(
+            batch_effects, target_intensity_data_preprocessed)
+        # Write intensities of locus of interest corrected for batch effects.
+        corrected_intensities = self._correct_batch_effects(
+            target_intensity_data_sliced, batch_effects)
+        return corrected_intensities
+
+    def batch_effects_train(self, reference_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
         # Within the reference intensity data, we confine ourselves to the
@@ -608,28 +630,22 @@ class IntensityCorrection:
         # I.e., the projected principal components (PCs) explain batch effects.
         # We want to regress out these batch effects in the locus of interest.
         batch_effects = self._pca_fit_transform(intensity_data_preprocessed)
-        # The projected principal components explain batch effects.
-        # We try to explain as much of the locus of interest using the PCs
-        # The residuals can be used in further analyses.
-        target_intensity_data_sliced = target_intensity_data.loc[
-                                       :, self._target_variants]
+        return batch_effects
 
-        target_intensity_data_preprocessed = pd.DataFrame(
-            sklearn.preprocessing.StandardScaler(with_std=False)
-            .fit_transform(target_intensity_data_sliced),
-            columns=target_intensity_data_sliced.columns,
-            index=target_intensity_data_sliced.index
-        )
+    def correct_intensities(self, batch_effects, target_intensity_data):
+        # The principal components depict batch effects.
+        # Here, we predict the batch effects on the locus of interest.
+        # Using the predicted batch effects, we can correct the locus of interest for the
+        # expected batch effects.
+        target_intensity_data_sliced = (
+            target_intensity_data.loc[
+            :, self._target_variants[self._target_variants.isin(target_intensity_data.columns)]])
 
-        # Fit the correction model
-        self._correction_model.fit(
-            batch_effects, target_intensity_data_preprocessed)
-        # Write intensities of locus of interest corrected for batch effects.
-        corrected_intensities = self._correct_batch_effects(
+        residual_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
-        return corrected_intensities
+        return residual_intensities
 
-    def correct_intensities(self, reference_intensity_data, target_intensity_data):
+    def batch_effects(self, reference_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
         # Within the reference intensity data, we confine ourselves to the
@@ -646,17 +662,7 @@ class IntensityCorrection:
         # Get batch effects by calculating principal components
         batch_effects = self._pca_transform(
             intensity_data_preprocessed)
-        # The principal components depict batch effects.
-        # Here, we predict the batch effects on the locus of interest.
-        # Using the predicted batch effects, we can correct the locus of interest for the
-        # expected batch effects.
-        target_intensity_data_sliced = (
-            target_intensity_data.loc[
-            :, self._target_variants[self._target_variants.isin(target_intensity_data.columns)]])
-
-        residual_intensities = self._correct_batch_effects(
-            target_intensity_data_sliced, batch_effects)
-        return residual_intensities
+        return batch_effects
 
     def _scale_fit_transform(self, reference_intensity_data):
         return pd.DataFrame(
@@ -758,9 +764,11 @@ class IntensityCorrection:
                 - predicted_batch_effects_in_locus_of_interest)
         return residual_intensities
 
-    def write_output(self, path, corrected_intensities):
+    def write_output(self, path, corrected_intensities, batch_effects):
         corrected_intensities.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
+        batch_effects.to_csv(
+            ".".join([path, "intensity_correction", "batcheffects", "csv", "gz"]))
 
     def write_fit(self, path):
         pickle.dump(self, open(
@@ -996,12 +1004,17 @@ def main(argv=None):
         intensity_correction = IntensityCorrection(
             variants_in_locus.Name,
             **intensity_correction_parameters)
+        batch_effects = intensity_correction.batch_effects_train(
+            reference_intensity_data=intensity_matrix.T)
         corrected_intensities = intensity_correction.fit(
-            reference_intensity_data=intensity_matrix.T,
+            batch_effects=batch_effects,
             target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
-        intensity_correction.write_output(args.out, corrected_intensities)
+        intensity_correction.write_output(
+            args.out,
+            corrected_intensities=corrected_intensities,
+            batch_effects=batch_effects)
         intensity_correction.write_fit(args.out)
 
     # if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
@@ -1025,12 +1038,14 @@ def main(argv=None):
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection.load_instance(args.correction)
+        batch_effects = intensity_correction.batch_effects(
+            reference_intensity_data=intensity_matrix.T)
         corrected_intensities = intensity_correction.correct_intensities(
-            reference_intensity_data=intensity_matrix.T,
+            batch_effects=batch_effects,
             target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
-        intensity_correction.write_output(args.out, corrected_intensities)
+        intensity_correction.write_output(args.out, corrected_intensities=corrected_intensities)
 
     # args.
 
