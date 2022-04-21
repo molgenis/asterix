@@ -573,7 +573,7 @@ class FinalReportGenotypeDataReader:
 class IntensityCorrection:
     def __init__(self, variant_list_for_locus, pca_n_components=None,
                  pca_over_samples=True,
-                 pca_scaling=True, regression_fit_intercept=True):
+                 pca_scaling=True, regression_fit_intercept=False):
         self._pca_over_samples = pca_over_samples
         self._target_variants = variant_list_for_locus
         self._scale = pca_scaling
@@ -614,19 +614,15 @@ class IntensityCorrection:
         # The residuals can be used in further analyses.
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._target_variants]
-        target_intensity_data_preprocessed = pd.DataFrame(
-            sklearn.preprocessing.StandardScaler(with_std=False)
-            .fit_transform(target_intensity_data_sliced),
-            columns=target_intensity_data_sliced.columns,
-            index=target_intensity_data_sliced.index
-        )
+        self._target_variant_means = target_intensity_data_sliced.mean(axis=1)
+        target_intensity_data_sliced = (target_intensity_data_sliced.T - self._target_variant_means).T
         # Fit the correction model
         self._correction_model.fit(
-            batch_effects, target_intensity_data_preprocessed)
+            batch_effects, target_intensity_data_sliced)
         # Write intensities of locus of interest corrected for batch effects.
-        intensities_corrected = self._correct_batch_effects(
-            target_intensity_data_preprocessed, batch_effects)
-        return intensities_corrected
+        self._corrected = self._correct_batch_effects(
+            target_intensity_data_sliced, batch_effects)
+        return self._corrected
 
     def correct_intensities(self, reference_intensity_data, target_intensity_data):
         # First prepare the reference intensity data.
