@@ -4,4 +4,4 @@ batch correction:
   pca_scaling: true
   pca_n_components: 100
   pca_over_samples: true
-  regression_fit_intercept: true
+  regression_fit_intercept: false
