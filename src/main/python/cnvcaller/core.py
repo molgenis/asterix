@@ -583,7 +583,6 @@ class IntensityCorrection:
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
         self._fitted_reference_variants = None
         self._pca_fit = None
-        self._target_variant_means = None
         self._pca_explained_variance_dataframe = None
 
     def fit(self, reference_intensity_data, target_intensity_data):
@@ -614,15 +613,21 @@ class IntensityCorrection:
         # The residuals can be used in further analyses.
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._target_variants]
-        self._target_variant_means = target_intensity_data_sliced.mean(axis=0)
-        target_intensity_data_preprocessed = (target_intensity_data_sliced.T - self._target_variant_means).T
+
+        target_intensity_data_preprocessed = pd.DataFrame(
+            sklearn.preprocessing.StandardScaler(with_std=False)
+            .fit_transform(target_intensity_data_sliced),
+            columns=target_intensity_data_sliced.columns,
+            index=target_intensity_data_sliced.index
+        )
+
         # Fit the correction model
         self._correction_model.fit(
             batch_effects, target_intensity_data_preprocessed)
         # Write intensities of locus of interest corrected for batch effects.
-        self._corrected = self._correct_batch_effects(
+        corrected_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
-        return self._corrected
+        return corrected_intensities
 
     def correct_intensities(self, reference_intensity_data, target_intensity_data):
         # First prepare the reference intensity data.
