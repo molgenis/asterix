@@ -615,10 +615,10 @@ class IntensityCorrection:
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._target_variants]
         self._target_variant_means = target_intensity_data_sliced.mean(axis=0)
-        target_intensity_data_sliced = (target_intensity_data_sliced.T - self._target_variant_means).T
+        target_intensity_data_preprocessed = (target_intensity_data_sliced.T - self._target_variant_means).T
         # Fit the correction model
         self._correction_model.fit(
-            batch_effects, target_intensity_data_sliced)
+            batch_effects, target_intensity_data_preprocessed)
         # Write intensities of locus of interest corrected for batch effects.
         self._corrected = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
@@ -648,9 +648,6 @@ class IntensityCorrection:
         target_intensity_data_sliced = (
             target_intensity_data.loc[
             :, self._target_variants[self._target_variants.isin(target_intensity_data.columns)]])
-
-        target_intensity_data_sliced = (target_intensity_data_sliced - self._target_variant_means[
-            self._target_variants.isin(target_intensity_data_sliced.columns)]).T
 
         residual_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
