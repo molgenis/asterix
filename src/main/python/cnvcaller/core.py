@@ -614,7 +614,7 @@ class IntensityCorrection:
         # The residuals can be used in further analyses.
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._target_variants]
-        self._target_variant_means = target_intensity_data_sliced.mean(axis=1)
+        self._target_variant_means = target_intensity_data_sliced.mean(axis=0)
         target_intensity_data_sliced = (target_intensity_data_sliced.T - self._target_variant_means).T
         # Fit the correction model
         self._correction_model.fit(
@@ -747,6 +747,8 @@ class IntensityCorrection:
         # expected batch effects.
         predicted_batch_effects_in_locus_of_interest = self._correction_model.predict(
             principal_components)
+        print(predicted_batch_effects_in_locus_of_interest.shape)
+        print(np.mean(predicted_batch_effects_in_locus_of_interest, axis=None))
         # We can correct the locus of interest by subtracting the predicted batch effects
         # from the raw intensity data.
         residual_intensities = (
