@@ -573,7 +573,7 @@ class FinalReportGenotypeDataReader:
 class IntensityCorrection:
     def __init__(self, variant_list_for_locus, pca_n_components=None,
                  pca_over_samples=True,
-                 pca_scaling=True, regression_fit_intercept=False):
+                 pca_scaling=True, regression_fit_intercept=True):
         self._pca_over_samples = pca_over_samples
         self._target_variants = variant_list_for_locus
         self._scale = pca_scaling
