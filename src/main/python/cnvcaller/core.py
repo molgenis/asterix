@@ -61,11 +61,9 @@ AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
 class GenomicWindow:
     BP_UNITS = {"bp": 1, "kb": 1000, "mb": 1000000}
     UNITS = tuple(BP_UNITS.keys()) + ("variants",)
-
     def __init__(self, window, unit="variants"):
         self.unit = unit
         self.window = window
-
     def get_variants(self, locus_ranges, manifest_ranges):
         if self.unit == "variants":
             return pyranges.concat([
@@ -74,7 +72,6 @@ class GenomicWindow:
         else:
             return manifest_ranges.intersect(
                 locus_ranges.extend(int(self.get_window("bp"))))[["Chromosome", "Start", "End", "Name"]]
-
     def get_n_variants(self, locus_ranges, manifest_ranges):
         return (pyranges.concat([
             locus_ranges[[]].k_nearest(
@@ -84,7 +81,6 @@ class GenomicWindow:
                 manifest_ranges, how="upstream", overlap=False,
                 k=self.window)])
             .new_position("swap")[["Chromosome", "Start", "End", "Name"]])
-
     @classmethod
     def from_string(cls, window_as_string):
         regex_match = re.fullmatch(r"(\d+)(\w+)?", window_as_string)
@@ -95,19 +91,15 @@ class GenomicWindow:
         if unit is None:
             unit = "variants"
         return GenomicWindow(int(window), unit)
-
     @classmethod
     def _unit_check(cls, unit):
         if unit is not None and unit not in cls.UNITS and unit is not None:
             raise ValueError("window unit not valid. {} not in {}".format(unit, cls.UNITS))
-
     def __str__(self):
         return " ".join([self.window, self.unit])
-
     def get_window(self, unit):
         self._unit_check(unit)
         return self.window * (self.BP_UNITS[self.unit] / self.BP_UNITS[unit])
-
 
 class ArgumentParser:
     def __init__(self):
@@ -119,20 +111,16 @@ class ArgumentParser:
         self.add_debug_parameter()
         self.add_config_parameter()
         self.add_out_argument(self.parser)
-
     class SubCommand(enum.Enum):
         VARIANTS = "variants"
         DATA = "data"
         FIT = "fit"
         CALL = "call"
-
         @classmethod
         def list(cls):
             return list(map(lambda c: c.value, cls))
-
         def __str__(self):
             return self.name.lower()
-
     def add_subparsers(self):
         subparsers = self.parser.add_subparsers(help='procedure to run')
         parser_for_input_preparation = subparsers.add_parser(
@@ -149,7 +137,6 @@ class ArgumentParser:
         parser_for_calling = subparsers.add_parser('call', help="Call CNVs using correction and calling parameters")
         self.add_staged_data_argument(parser_for_calling)
         self.add_calling_parameter_argument(parser_for_calling)
-
     def parse_input(self, argv):
         """
         Parse command line input.
@@ -165,10 +152,8 @@ class ArgumentParser:
         self.extend_argument_parser()
         args_remainder = self.parser.parse_args(argv)
         return args_remainder
-
     def is_action_requested(self, sub_command):
         return sub_command in self.sub_commands
-
     @staticmethod
     def create_command_parser():
         parser = argparse.ArgumentParser(
@@ -185,13 +170,11 @@ class ArgumentParser:
                 "  call           Call CNVs using correction and calling parameters"])))
         ArgumentParser.add_command_choice_argument(parser)
         return parser
-
     @classmethod
     def add_command_choice_argument(cls, parser):
         parser.add_argument('command',
                             help='Command(s) to run', nargs="+",
                             choices=cls.SubCommand.list())
-
     @staticmethod
     def create_argument_parser():
         """
@@ -202,23 +185,19 @@ class ArgumentParser:
         parser = argparse.ArgumentParser(description="CNV-calling algorithm",
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         return parser
-
     def add_sample_list_argument(self):
         self.parser.add_argument('-s', '--sample-list', type=self.is_readable_file,
                                  required=True,
                                  default=None,
                                  help="List of samples to include. This should be the list of samples that"
                                       "passed quality control.")
-
     def add_final_report_path_argument(self, parser):
         parser.add_argument('-g', '--final-report-file-path', type=self.is_readable_file, required=True, default=None,
                             help="Path to where final report files are located")
-
     def add_out_argument(self, parser):
         parser.add_argument('-o', '--out', type=self.can_write_to_file_path,
                             required=True, default=None,
                             help="File prefix the output can be written to. ")
-
     def add_bed_path_parameter(self, parser):
         parser.add_argument('-b', '--bed-file', type=self.is_readable_file,
                             required=True,
@@ -226,7 +205,6 @@ class ArgumentParser:
                             help="Bed file detailing a locus of interest."
                                  "This is excluded in corrections, and exclusively"
                                  "assessed in the fitting and calling steps")
-
     @classmethod
     def can_write_to_file_path(cls, file):
         """
@@ -243,7 +221,6 @@ class ArgumentParser:
             return file
         else:
             raise argparse.ArgumentTypeError("directory: {0} is not a readable dir".format(directory))
-
     @classmethod
     def is_readable_dir(cls, directory):
         """
@@ -259,7 +236,6 @@ class ArgumentParser:
             return directory
         else:
             raise argparse.ArgumentTypeError("directory: {0} is not a readable dir".format(directory))
-
     @classmethod
     def is_readable_file(cls, file_path):
         """
@@ -275,7 +251,6 @@ class ArgumentParser:
             return file_path
         else:
             raise argparse.ArgumentTypeError("file path:{0} is not a readable file".format(file_path))
-
     def is_prefix_pointing_to_readables(cls, prefix, suffixes):
         """
         Checks whether the given directory is readable
@@ -289,7 +264,6 @@ class ArgumentParser:
             file_path = "{}.{}".format(prefix, suffix)
             assert file_path == cls.is_readable_file(file_path)
         return prefix
-
     @classmethod
     def is_data(cls, path, extension_expected):
         """
@@ -306,27 +280,23 @@ class ArgumentParser:
             raise argparse.ArgumentTypeError(
                 "file path:{0} is not of type .'{1}'. (.'{2}' received)".format(
                     path, extension_actual, extension_expected))
-
     @classmethod
     def is_writable_location(cls, path):
         if os.access(path, os.W_OK):
             return path
         else:
             raise argparse.ArgumentTypeError("directory: {0} is not a writable path".format(path))
-
     def add_corrective_variants_argument(self, parser):
         parser.add_argument(
             '-v', '--corrective-variants', type=self.is_readable_file,
             help="filters out all variants that are not listed here"
         )
-
     def add_variant_prefix_argument(self, parser):
         parser.add_argument(
             '-V', '--variants-prefix',
             type=lambda x: self.is_prefix_pointing_to_readables(x, ["corrective.bed", "locus.bed"]),
             help="matches .locus.bed and .corrective.bed files."
         )
-
     def extend_argument_parser(self):
         sub_command_mapping = {
             self.SubCommand.VARIANTS:
@@ -349,36 +319,30 @@ class ArgumentParser:
             methods_to_run.discard(self.add_staged_data_argument)
         for method in methods_to_run:
             method(self.parser)
-
     def add_window_argument(self, parser):
         parser.add_argument('-w', '--window', type=GenomicWindow.from_string,
                             required=False, default=0,
                             help="number of variants or kb to extend the locus of interest"
                                  "for variants")
-
     def add_batch_weights_argument(self, parser):
         parser.add_argument('-C', '--correction', type=self.is_readable_dir,
                             required=True, default=None,
                             help="path where batch correction weights, and corrected data are stored."
                                  "output of the batch weighting step")
-
     def add_calling_cluster_weight_argument(self, parser):
         parser.add_argument('-F', '--cluster-file', type=self.is_readable_dir,
                             required=True, nargs='+', default=None,
                             help="path where cluster weights are stored."
                                  "output of the fitting step")
-
     def add_bead_pool_manifest_argument(self, parser):
         parser.add_argument('-bpm', '--bead-pool-manifest', type=self.is_readable_file,
                             required=True, default=None,
                             help="path to a .bpm file corresponding to the genotyping array")
-
     def add_staged_data_output_argument(self, parser):
         parser.add_argument(
             '--out', type=self.can_write_to_file_path,
             metavar="PATH_TO_NEW_PICKLE_FILE",
             help="path to a pickle file")
-
     def add_staged_data_argument(self, parser):
         parser.add_argument(
             '--input', '-i', type=lambda arg: self.is_data(arg, '.pkl'), nargs="+",
@@ -386,27 +350,22 @@ class ArgumentParser:
             help=os.linesep.join([
                 "paths directing to .pkl files with intensity data.",
                 "Columns should correspond to samples and rows should correspond to variants."]))
-
     def add_debug_parameter(self):
         self.parser.add_argument(
             '--debug', '-d', action="store_true", default=False,
             help="write files useful for debugging"
         )
-
     def add_config_parameter(self):
         self.parser.add_argument(
             '--config', '-c', type=self.config, required=True,
             help="config file")
-
     @classmethod
     def config(cls, path):
         return yaml.safe_load(open(path))
 
-
 class IntensityDataReader:
     def __init__(self, sample_list):
         self._sample_list = sample_list
-
     def load(self, data):
         data_frame_list = list()
         for file in data:
@@ -424,30 +383,25 @@ class IntensityDataReader:
             print("warning excess: {}".format(excess_samples))
         return intensity_data
 
-
 class FinalReportReaderException(Exception):
     """
     Exception raised for errors in the input final reports
     """
-
     def __init__(self, message, file, line_index):
         self.file = file
         self.message = message
         self.line_index = line_index
         super().__init__(self.message)
-
     def __str__(self):
         return os.linesep.join(["Exception encountered in file:",
                                 "'{1}', on line {2}: {3}"]).format(
             self.file, self.line_index, self.message)
-
 
 class FinalReportGenotypeDataReader:
     """
     Read final report files
     """
     new_part_pattern = re.compile(r"^\[\w+]$")
-
     def __init__(self, path, sample_list, variant_list):
         self._part_key = None
         self.sep = "\t"
@@ -456,7 +410,6 @@ class FinalReportGenotypeDataReader:
         self._variants_to_include = variant_list
         self._variants_to_include_indices = None
         self._line_counter = 0
-
     def read_intensity_data(self):
         """
         Method that reads the intensity values from a final report file.
@@ -486,16 +439,13 @@ class FinalReportGenotypeDataReader:
                 else:
                     part_buffer.append(line)
         return data_frame
-
     def get_reading_mode(self):
         reading_mode = "r"
         if self._path.endswith(".gz"):
             reading_mode = "rb"
         return reading_mode
-
     def parse_header(self, part_buffer):
         pass
-
     def _read_data(self, buffer):
         data_array_list = list()
         sample_list = list()
@@ -544,7 +494,6 @@ class FinalReportGenotypeDataReader:
         #         self._path,
         #         self._line_counter)
         return pd.concat(data_array_list)
-
     def _empty_dataframe(self):
         final_report_columns = DEFAULT_FINAL_REPORT_COLS.copy()
         final_report_columns['R'] = 'float'
@@ -552,7 +501,6 @@ class FinalReportGenotypeDataReader:
         empty_sample_data_frame = pd.DataFrame(columns)
         empty_sample_data_frame.set_index('SNP Name', inplace=True)
         return empty_sample_data_frame
-
     def _read_sample_intensities(self, buffer, columns):
         buffer.seek(0)
         sample_data_frame = pd.read_csv(buffer, names=columns,
@@ -569,11 +517,11 @@ class FinalReportGenotypeDataReader:
                  .format(sample_data_frame["Sample ID"][0])), self._path, self._line_counter)
         return sample_data_frame
 
-
 class IntensityCorrection:
     def __init__(self, variant_list_for_locus, pca_n_components=None,
                  pca_over_samples=True,
                  pca_scaling=True, regression_fit_intercept=True):
+        self._reference_sample_means = None
         self._pca_over_samples = pca_over_samples
         self._target_variants = variant_list_for_locus
         self._scale = pca_scaling
@@ -584,21 +532,18 @@ class IntensityCorrection:
         self._fitted_reference_variants = None
         self._pca_fit = None
         self._pca_explained_variance_dataframe = None
-
     def fit(self, batch_effects, target_intensity_data):
         # The projected principal components explain batch effects.
         # We try to explain as much of the locus of interest using the PCs
         # The residuals can be used in further analyses.
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._target_variants]
-
         target_intensity_data_preprocessed = pd.DataFrame(
             sklearn.preprocessing.StandardScaler(with_std=False)
             .fit_transform(target_intensity_data_sliced),
             columns=target_intensity_data_sliced.columns,
             index=target_intensity_data_sliced.index
         )
-
         # Fit the correction model
         self._correction_model.fit(
             batch_effects, target_intensity_data_preprocessed)
@@ -606,7 +551,6 @@ class IntensityCorrection:
         corrected_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
         return corrected_intensities
-
     def batch_effects_train(self, reference_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
@@ -631,7 +575,6 @@ class IntensityCorrection:
         # We want to regress out these batch effects in the locus of interest.
         batch_effects = self._pca_fit_transform(intensity_data_preprocessed)
         return batch_effects
-
     def correct_intensities(self, batch_effects, target_intensity_data):
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
@@ -640,11 +583,9 @@ class IntensityCorrection:
         target_intensity_data_sliced = (
             target_intensity_data.loc[
             :, self._target_variants[self._target_variants.isin(target_intensity_data.columns)]])
-
         residual_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
         return residual_intensities
-
     def batch_effects(self, reference_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
@@ -663,30 +604,30 @@ class IntensityCorrection:
         batch_effects = self._pca_transform(
             intensity_data_preprocessed)
         return batch_effects
-
     def _scale_fit_transform(self, reference_intensity_data):
         return pd.DataFrame(
             self._standardize_scaler.fit_transform(
                 reference_intensity_data),
             columns=reference_intensity_data.columns,
             index=reference_intensity_data.index)
-
     def _scale_transform(self, reference_intensity_data):
         return pd.DataFrame(
             self._standardize_scaler.transform(
                 reference_intensity_data),
             columns=reference_intensity_data.columns,
             index=reference_intensity_data.index)
-
     def _pca_fit_transform(self, intensity_data_preprocessed):
         pca = sklearn.decomposition.PCA(
             n_components=self.pca_n_components)
         if self._pca_over_samples:
+            self._reference_sample_means = intensity_data_preprocessed.mean(axis=1)
+            intensity_data_centered = (
+                intensity_data_preprocessed.T - self._reference_sample_means)
             # Now, if we should do a pca over the samples instead of
             # over the columns (variants), we transpose the
             # the intensity data frame, and fit the PCA on this matrix
             self._pca_fit = pd.DataFrame(
-                pca.fit_transform(intensity_data_preprocessed.T),
+                pca.fit_transform(intensity_data_centered),
                 index=self._fitted_reference_variants)
             # The components_ attribute (n_components, n_samples),
             # represent the batch effects.
@@ -710,12 +651,11 @@ class IntensityCorrection:
             pd.DataFrame({'explained_variance': pca.explained_variance_,
                           'explained_variance_ratio': pca.explained_variance_ratio_}))
         return batch_effects
-
     def _pca_transform(self, intensity_data_preprocessed):
         if self._pca_over_samples:
             intensity_data_centered = (
                     intensity_data_preprocessed.T
-                    - intensity_data_preprocessed.mean(axis=1))
+                    - self._reference_sample_means)
             # We need to get the projections of the fit over samples now
             # We can calculate the batch effects for our samples using the following code,
             # wherein the x matrix represents the least squares solution to the
@@ -729,7 +669,6 @@ class IntensityCorrection:
             # Assign x to be the batch effects
             batch_effects = pd.DataFrame(
                 x, index=intensity_data_preprocessed.index)
-            print(batch_effects)
         else:
             # replicate the transform method of sklearn.decomposition.PCA
             intensity_data_centered = (intensity_data_preprocessed
@@ -738,16 +677,13 @@ class IntensityCorrection:
                 np.dot(intensity_data_centered, self._pca_fit),
                 index=intensity_data_preprocessed.index)
         return batch_effects
-
     def variant_indices_outside_locus_of_interest(self, intensity_data):
         return np.logical_and(
             self.indices_not_in_locus_of_interest(intensity_data),
             ~intensity_data.isnull().any(axis=0))
-
     def indices_not_in_locus_of_interest(self, intensity_data):
         return ~intensity_data.columns.isin(
             self._target_variants)
-
     def _correct_batch_effects(self, target_intensity_data_sliced, principal_components):
         # The principal components depict batch effects.
         # Here, we predict the batch effects on the locus of interest.
@@ -763,13 +699,11 @@ class IntensityCorrection:
                 target_intensity_data_sliced
                 - predicted_batch_effects_in_locus_of_interest)
         return residual_intensities
-
     def write_output(self, path, corrected_intensities, batch_effects):
         corrected_intensities.to_csv(
             ".".join([path, "intensity_correction", "corrected", "csv", "gz"]))
         batch_effects.to_csv(
             ".".join([path, "intensity_correction", "batcheffects", "csv", "gz"]))
-
     def write_fit(self, path):
         pickle.dump(self, open(
             ".".join([path, "intensity_correction", "mod", "pkl"]), "wb"))
@@ -777,22 +711,18 @@ class IntensityCorrection:
             ".".join([path, "intensity_correction", "pca", "csv", "gz"]))
         self._pca_explained_variance_dataframe.to_csv(
             ".".join([path, "intensity_correction", "eigenvalues", "csv", "gz"]))
-
     @classmethod
     def load_instance(cls, path):
         return pickle.load(open(
             ".".join([path, "intensity_correction", "mod", "pkl"]), "rb"))
-
     def outliers(self):
         raise NotImplementedError()
         # Loop through all requested principal components,
         # marking each sample that is outside of the mean -/+ x*sd
-
     def in_fitted_reference_variants(self, intensity_data):
         return np.logical_and(
             intensity_data.columns.isin(self._fitted_reference_variants),
             ~intensity_data.isnull().any(axis=0))
-
 
 # Functions
 def calculate_downsampling_factor(grouped_data_frame, N):
@@ -801,7 +731,6 @@ def calculate_downsampling_factor(grouped_data_frame, N):
     grouped_data_frame['downsamplingFactor'] = (
             grouped_data_frame.proportionsExpected / grouped_data_frame.proportionsObserved)
     return grouped_data_frame
-
 
 def draw_variants_proportionate(grouped_data_frame, max_downsampling_factor):
     print(grouped_data_frame)
@@ -813,7 +742,6 @@ def draw_variants_proportionate(grouped_data_frame, max_downsampling_factor):
     # Perform sampling
     return (grouped_data_frame
             .sample(frac=float(downsampling_factor), replace=False))
-
 
 def sample_corrective_variants_proportionally(corrective_variant_path, manifest_ranges):
     # Read the names of those variants that adhere to a number of criteria.
@@ -854,7 +782,6 @@ def sample_corrective_variants_proportionally(corrective_variant_path, manifest_
         sampled_corrective_variants_list.append(grouped_data_frame
                                                 .sample(frac=float(downsampling_factor), replace=False))
     return pyranges.PyRanges(pd.concat(sampled_corrective_variants_list).loc[:, ["Chromosome", "Start", "End", "Name"]])
-
 
 # Main
 
