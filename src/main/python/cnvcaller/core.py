@@ -644,7 +644,7 @@ class IntensityCorrection:
                 index=intensity_data_preprocessed.index)
             # We now assign the eigenvectors to the _pca_fit attribute
             self._pca_fit = pd.DataFrame(
-                pca.components_,
+                pca.components_.T,
                 index=self._fitted_reference_variants)
         # Store the explained variance data in a dataframe
         self._pca_explained_variance_dataframe = (
@@ -654,8 +654,8 @@ class IntensityCorrection:
     def _pca_transform(self, intensity_data_preprocessed):
         if self._pca_over_samples:
             intensity_data_centered = (
-                    intensity_data_preprocessed.T
-                    - self._reference_sample_means)
+                intensity_data_preprocessed.T
+                - intensity_data_preprocessed.mean(axis=1))
             # We need to get the projections of the fit over samples now
             # We can calculate the batch effects for our samples using the following code,
             # wherein the x matrix represents the least squares solution to the
@@ -965,7 +965,7 @@ def main(argv=None):
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection.load_instance(args.correction)
-        batch_effects = intensity_correction.batch_effects(
+        batch_effects = intensity_correction.batch_effects_train(
             reference_intensity_data=intensity_matrix.T)
         corrected_intensities = intensity_correction.correct_intensities(
             batch_effects=batch_effects,
