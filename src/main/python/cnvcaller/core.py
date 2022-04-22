@@ -1045,7 +1045,10 @@ def main(argv=None):
             target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
-        intensity_correction.write_output(args.out, corrected_intensities=corrected_intensities)
+        intensity_correction.write_output(
+            args.out,
+            corrected_intensities=corrected_intensities,
+            batch_effects=batch_effects)
 
     # args.
 
