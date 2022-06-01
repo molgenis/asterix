@@ -564,6 +564,7 @@ class IntensityCorrection:
         # Now, if requested, we must scale the intensities of variants.
         if self._scale:
             # The intensity data matrix (transposed or not) we can center and scale.
+            print("Scaling reference intensity data...")
             intensity_data_preprocessed = self._scale_fit_transform(
                 reference_intensity_data_sliced)
         else:
@@ -620,6 +621,7 @@ class IntensityCorrection:
         pca = sklearn.decomposition.PCA(
             n_components=self.pca_n_components)
         if self._pca_over_samples:
+            print("Calculating principal components over samples")
             self._reference_sample_means = intensity_data_preprocessed.mean(axis=1)
             intensity_data_centered = (
                 intensity_data_preprocessed.T - self._reference_sample_means)
@@ -639,6 +641,7 @@ class IntensityCorrection:
             # Now, if we should not do a pca over the samples,
             # but instead over the columns (variants), we fit
             # the pca object on the intensity data (not transposing)
+            print("Calculating principal components")
             batch_effects = pd.DataFrame(
                 pca.fit_transform(intensity_data_preprocessed),
                 index=intensity_data_preprocessed.index)
@@ -959,13 +962,18 @@ def main(argv=None):
         intensity_data_frame_reader = IntensityDataReader(sample_list["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
+        # Write intensity data
+        intensity_data_frame.loc[variants_in_locus.Name].to_csv(
+            ".".join([args.out, "intensity_data_frame", "csv.gz"]),
+            sep="\t", index_label='variant')
+
         # Intensity matrix
         intensity_matrix = intensity_data_frame.pivot(
             columns="Sample ID", values=value_to_use)
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection.load_instance(args.correction)
-        batch_effects = intensity_correction.batch_effects_train(
+        batch_effects = intensity_correction.batch_effects(
             reference_intensity_data=intensity_matrix.T)
         corrected_intensities = intensity_correction.correct_intensities(
             batch_effects=batch_effects,
