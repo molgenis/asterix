@@ -3,7 +3,7 @@ base:
 batch correction:
   pca_scaling: true
   pca_n_components: 100
-  pca_over_samples: true
+  pca_over_samples: false
   regression_fit_intercept: true
 naive clustering:
   - [22, 42525043, 42525045]
