@@ -974,7 +974,7 @@ def load_ranges_from_config(path_or_list_of_dicts):
             sep="\t"))
 
     return pyranges.PyRanges(
-        pd.DataFrame(input, columns=["Chromosome", "Start", "End"]))
+        pd.DataFrame(path_or_list_of_dicts, columns=["Chromosome", "Start", "End"]))
 
 def draw_variants_proportionate(grouped_data_frame, max_downsampling_factor):
     print(grouped_data_frame)
