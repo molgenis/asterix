@@ -1195,7 +1195,7 @@ def main(argv=None):
 
         naive_clustering = NaiveHweInformedClustering()
         naive_copy_number_assignment = naive_clustering.get_copy_number_assignment(
-            corrected_intensities[:,variants_for_naive_clustering.Name].values)
+            corrected_intensities[:,variants_for_naive_clustering.Name.values].values)
         naive_clustering.write_output(
             args.out, naive_copy_number_assignment)
         print("Naive clustering complete", end=os.linesep*2)
