@@ -1153,7 +1153,7 @@ def main(argv=None):
         print("Writing matrix to: {}    {}".format(os.linesep, intensity_matrix_file_path), end=os.linesep*2)
 
         # Intensity matrix
-        intensity_data_frame["Sample ID"] = pd.Categorical(intensity_data_frame["Sample_ID"])
+        intensity_data_frame["Sample ID"] = pd.Categorical(intensity_data_frame["Sample ID"])
         intensity_matrix = intensity_data_frame.pivot(
             columns="Sample ID", values=value_to_use)
         intensity_matrix.to_csv(
