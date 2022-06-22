@@ -540,7 +540,8 @@ class IntensityCorrection:
         target_intensity_data_sliced = target_intensity_data.loc[
                                        :, self._target_variants]
         target_intensity_data_preprocessed = pd.DataFrame(
-            sklearn.preprocessing.StandardScaler(with_std=False),
+            sklearn.preprocessing.StandardScaler(with_std=False)
+            .fit_transform(target_intensity_data_sliced),
             columns=target_intensity_data_sliced.columns,
             index=target_intensity_data_sliced.index
         )
@@ -607,7 +608,8 @@ class IntensityCorrection:
         return batch_effects
     def _scale_fit_transform(self, reference_intensity_data):
         return pd.DataFrame(
-            self._standardize_scaler.fit_transform(corrected_intensities, naive_copy_number_assignment),
+            self._standardize_scaler.fit_transform(
+                reference_intensity_data),
             columns=reference_intensity_data.columns,
             index=reference_intensity_data.index)
     def _scale_transform(self, reference_intensity_data):
@@ -628,7 +630,7 @@ class IntensityCorrection:
             # over the columns (variants), we transpose the
             # the intensity data frame, and fit the PCA on this matrix
             self._pca_fit = pd.DataFrame(
-                pca.fit_transform(corrected_intensities, naive_copy_number_assignment),
+                pca.fit_transform(intensity_data_centered),
                 index=self._fitted_reference_variants)
             # The components_ attribute (n_components, n_samples),
             # represent the batch effects.
@@ -642,7 +644,7 @@ class IntensityCorrection:
             # the pca object on the intensity data (not transposing)
             print("Calculating principal components")
             batch_effects = pd.DataFrame(
-                pca.fit_transform(corrected_intensities, naive_copy_number_assignment),
+                pca.fit_transform(intensity_data_preprocessed),
                 index=intensity_data_preprocessed.index)
             # We now assign the eigenvectors to the _pca_fit attribute
             self._pca_fit = pd.DataFrame(
@@ -1127,35 +1129,49 @@ def main(argv=None):
 
         intensity_data.to_pickle(args.out)
 
+    intensity_data_frame_file_path = ".".join([args.out, "intensity_data_frame", "csv.gz"])
+
     if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
         # Get batch correction configuration
         value_to_use = args.config['base']['value']
         intensity_correction_parameters = args.config['batch correction']
 
         # Load intensity data
+        print("Loading intensity data...")
         intensity_data_frame_reader = IntensityDataReader(sample_list["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
 
+        print("Intensity data loaded of shape: ".format(intensity_data_frame.shape), end=os.linesep*2)
+        print("Writing intensity data to: {}    {}".format(os.linesep, intensity_data_frame_file_path))
+
         intensity_data_frame.loc[variants_in_locus.Name].to_csv(
-            ".".join([args.out, "intensity_data_frame", "csv.gz"]),
+            intensity_data_frame_file_path,
             sep="\t", index_label='variant')
+
+        intensity_matrix_file_path = ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"])
+        print("Writing matrix to: {}    {}".format(os.linesep, intensity_matrix_file_path), end=os.linesep*2)
 
         # Intensity matrix
         intensity_matrix = intensity_data_frame.pivot(
             columns="Sample ID", values=value_to_use)
         intensity_matrix.to_csv(
-            ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"]),
+            intensity_matrix_file_path,
             sep="\t", index_label='variant')
+
+        print("Starting intensity correction...")
 
         # Do correction of intensities
         intensity_correction = IntensityCorrection(
             variants_in_locus.Name,
             **intensity_correction_parameters)
+        print("Calculating PCA loadings for genome-wide batch effects...")
         batch_effects = intensity_correction.batch_effects_train(
             reference_intensity_data=intensity_matrix.T)
+        print("Calculating batch effect corrections...")
         corrected_intensities = intensity_correction.fit(
             batch_effects=batch_effects,
             target_intensity_data=intensity_matrix.T)
+        print("Intensity correction complete.", end=os.linesep*2)
 
         # Write output for intensity correction
         intensity_correction.write_output(
@@ -1165,6 +1181,7 @@ def main(argv=None):
         intensity_correction.write_fit(args.out)
 
         # Get variants to use for initial clustering
+        print("Starting naive clustering...")
         ranges_for_naive_clustering = load_ranges_from_config(
             args.config['naive clustering'])
         ranges_for_dimensionality_reduction = load_ranges_from_config(
@@ -1179,12 +1196,16 @@ def main(argv=None):
             corrected_intensities[:,variants_for_naive_clustering.Name].values)
         naive_clustering.write_output(
             args.out, naive_copy_number_assignment)
+        print("Naive clustering complete", end=os.linesep*2)
 
+        print("Starting intensity CNV calling...")
         cyp2d6_intensity_cnv_caller = SnpIntensityCnvCaller(clustering_ranges=clustering_ranges,
                                                             ranges_for_dimensionality_reduction=ranges_for_dimensionality_reduction)
 
+        print("Performing dimensionality reduction...")
         projected_intensities = cyp2d6_intensity_cnv_caller.fit_transform_dimensionality_reduction(
             corrected_intensities, naive_copy_number_assignment)
+        print("Disentangling mixtures...")
         weights = np.tile(
             naive_clustering.get_copy_number_genotype_frequencies()['freq_genotypes'].values,
             (1, len(clustering_ranges)))
@@ -1194,6 +1215,8 @@ def main(argv=None):
             naive_clustering.get_centroids(projected_intensities).values)
         cyp2d6_cnv_probabilities = cyp2d6_intensity_cnv_caller.mixture_model_probabilities(
             projected_intensities)
+        print("Mixtures calculated, samples scored.", end=os.linesep*2)
+        print("Writing output to {}".format(args.out))
         cyp2d6_intensity_cnv_caller.write_output(
             args.out,
             projected_intensities=projected_intensities,
@@ -1212,7 +1235,7 @@ def main(argv=None):
 
         # Write intensity data
         intensity_data_frame.loc[variants_in_locus.Name].to_csv(
-            ".".join([args.out, "intensity_data_frame", "csv.gz"]),
+            intensity_data_frame_file_path,
             sep="\t", index_label='variant')
 
         # Intensity matrix
