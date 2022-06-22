@@ -102,6 +102,7 @@ class GenomicWindow:
         self._unit_check(unit)
         return self.window * (self.BP_UNITS[self.unit] / self.BP_UNITS[unit])
 
+
 class ArgumentParser:
     def __init__(self):
         self.sub_commands = list()
@@ -363,6 +364,7 @@ class ArgumentParser:
     @classmethod
     def config(cls, path):
         return yaml.safe_load(open(path))
+
 
 class IntensityDataReader:
     def __init__(self, sample_list):
@@ -967,12 +969,11 @@ def calculate_downsampling_factor(grouped_data_frame, N):
 
 def load_ranges_from_config(path_or_list_of_dicts):
     if isinstance(path_or_list_of_dicts, str):
-        pyranges.PyRanges(pd.read_csv(
+        return pyranges.PyRanges(pd.read_csv(
             path_or_list_of_dicts, index_col=False,
             names=("Chromosome", "Start", "End"),
             dtype={"Chromosome": str},
             sep="\t"))
-
     return pyranges.PyRanges(
         pd.DataFrame(path_or_list_of_dicts, columns=["Chromosome", "Start", "End"]))
 
