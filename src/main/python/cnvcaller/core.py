@@ -37,6 +37,8 @@ import pandas as pd
 import pyranges
 import scipy.stats
 import sklearn.decomposition
+import sklearn.discriminant_analysis
+import sklearn.mixture
 import IlluminaBeadArrayFiles
 
 # Metadata
@@ -181,7 +183,7 @@ class ArgumentParser:
     def create_argument_parser():
         """
         Method creating an argument parser
-        :param command: 
+        :param command:
         :return: parser
         """
         parser = argparse.ArgumentParser(description="CNV-calling algorithm",
@@ -730,6 +732,7 @@ class IntensityCorrection:
             intensity_data.columns.isin(self._fitted_reference_variants),
             ~intensity_data.isnull().any(axis=0))
 
+
 class SnpIntensityCnvCaller():
     """
     Class for calling copy numbers
@@ -742,152 +745,122 @@ class SnpIntensityCnvCaller():
     _
     """
     def __init__(self, variants, clustering_ranges, ranges_for_dimensionality_reduction):
-
-        self._variants = variants
+        self._variants = self.insert_indices(variants)
         self._ranges_for_dimensionality_reduction = self.insert_indices(
             ranges_for_dimensionality_reduction)
-        self._clustering_ranges = (
-            clustering_ranges.insert(np.arange(len(clustering_ranges))))
-
+        self._clustering_ranges = self.insert_indices(clustering_ranges)
         self._dimensionality_reduction_models = [None] * len(self._ranges_for_dimensionality_reduction)
         self._mixture_models = [None] * len(self._clustering_ranges)
-
         # For each dimensionality reduction range, get which ranges for the dimensionality reduction are involved
-        self.dimensionality_reduction_range_mapping = self._ranges_for_dimensionality_reduction.join(
+        self._dimensionality_reduction_range_mapping = self._ranges_for_dimensionality_reduction.join(
             self._variants,
             how='left', slack=1).as_df()[['Index', 'Index_b']]
-
         # For each clustering range, get which ranges for the dimensionality reduction are involved
         self._mixture_model_range_mapping = self._clustering_ranges.join(
             self._ranges_for_dimensionality_reduction,
             how='left', slack=1).as_df()[['Index', 'Index_b']]
-
     def fit_transform_dimensionality_reduction(self, intensities, cluster_assignment):
-
         intensities_projected = np.empty(
             shape=(intensities.shape[0], len(self._ranges_for_dimensionality_reduction)))
-
-        for index, range in self._ranges_for_dimensionality_reduction.as_df().iterrows():
-
-            range_index = range.Index
-            indices_from_input = self._mixture_model_range_mapping[
-                self._mixture_model_range_mapping['Index'] == range_index, 'Index_b']
-
+        for index, this_range in self._ranges_for_dimensionality_reduction.as_df().iterrows():
+            range_index = this_range.Index
+            indices_from_input = self._dimensionality_reduction_range_mapping.loc[
+                self._dimensionality_reduction_range_mapping['Index'] == range_index, 'Index_b']
             discriminant_analysis = sklearn.discriminant_analysis.LinearDiscriminantAnalysis(n_components=1)
-            intensities_projected[:,index] = discriminant_analysis.fit_transform(intensities[:,indices_from_input], cluster_assignment)
-
+            transform = discriminant_analysis.fit_transform(
+                intensities[self._variants.df.loc[indices_from_input, "Name"]], cluster_assignment)
+            print(transform[:,0])
+            intensities_projected[:,index] = transform[:,0]
             self._dimensionality_reduction_models[index] = discriminant_analysis
-
-        return intensities_projected
-
+        return pd.DataFrame(
+            intensities_projected, index=intensities.index)
     def fit_mixture_models(self, intensities, weights, centroids):
         # Range is a pyranges object.
-        self._clustering_ranges.as_df().apply(
-            self._fit_mixture_model,
-            args=(intensities,), axis=1, centroids=centroids, weights=weights)
-
-    def _fit_mixture_model(self, range, intensities, centroids, weights):
+        for index, this_range in self._clustering_ranges.as_df().iterrows():
+            self._mixture_models[index] = self._fit_mixture_model(
+                this_range, intensities, centroids, weights)
+    def _fit_mixture_model(self, this_range, intensities, centroids, weights):
         # Slice the x_matrix columns to keep those that are in this range
         # x_matrix columns should match with the ranges in dimensionality reduction
-
-        range_index = range.Index
-        indices_from_input = self._mixture_model_range_mapping[
+        range_index = this_range.Index
+        indices_from_input = self._mixture_model_range_mapping.loc[
             self._mixture_model_range_mapping['Index'] == range_index, 'Index_b']
-
-        centroids_per_feature = centroids[indices_from_input]
-
+        centroids_per_feature = centroids[:,indices_from_input]
         mixture_model = sklearn.mixture.GaussianMixture(
-            n_components=weights.shape[0], weights_init=weights[range_index], means_init=centroids_per_feature)
-        mixture_model.fit(intensities[:,indices_from_input])
-
-        self._mixture_models[intensities] = mixture_model
-        return
-
-    def mixture_model_probabilities(self, intensities):
-
-        probabilities = self._clustering_ranges.as_df().apply(
-            self._predict_mixture_model,
-            args=(intensities,), axis=1)
-
-        return probabilities
-
+            n_components=weights[range_index].shape[0],
+            weights_init=weights[range_index],
+            means_init=centroids_per_feature)
+        return mixture_model.fit(intensities.loc[:,indices_from_input])
+    def mixture_model_probabilities(self, intensities, labels):
+        index, this_range = next(self._clustering_ranges.as_df().iterrows())
+        return pd.DataFrame(
+            self._predict_mixture_model(this_range, intensities),
+            index=intensities.index,
+            columns=labels)
+    def mixture_model_probabilities_per_feature(self, intensities, labels):
+        index, this_range = next(self._clustering_ranges.as_df().iterrows())
+        return pd.DataFrame(
+            self._predict_mixture_model(this_range, intensities),
+            index=intensities.index,
+            columns=labels)
     def copy_numbers(self, intensities):
         probabilities = self.mixture_model_probabilities(intensities)
-
         # What to do when the mixture models are performed?
         # Per sample, per range, per class we have a probability.
         # Per sample we must then ascertain what cnv per range
         # is most probable.
-
         # We can do this by ascertaining for each sample what
         # combination of cnv calls is most probable
-
         pass
-
-    def _predict_mixture_model(self, index, intensities):
-        range_index = range.Index
-        indices_from_input = self._mixture_model_range_mapping[self._mixture_model_range_mapping['Index'] == range_index, 'Index_b']
-
-        probabilities = self._mixture_models[index].predict_proba(intensities[:,indices_from_input])
-
-        return probabilities
-
+    def _predict_mixture_model(self, this_range, intensities):
+        range_index = this_range.Index
+        indices_from_input = self._mixture_model_range_mapping.loc[self._mixture_model_range_mapping['Index'] == range_index, 'Index_b']
+        return self._mixture_models[range_index].predict_proba(intensities.loc[:,indices_from_input])
     def insert_indices(self, ranges):
         return ranges.insert(pd.Series(
             np.arange(len(ranges)),
-            "Index"))
-
+            name="Index"))
     def write_output(self, path, projected_intensities, copy_number_probabilities):
         copy_number_probabilities.to_csv(
             ".".join([path, "copy_number_assignment", "probabilities", "csv", "gz"]))
         projected_intensities.to_csv(
             ".".join([path, "copy_number_assignment", "projected_intensities", "csv", "gz"]))
-
     def write_fit(self, path):
         pickle.dump(self, open(
             ".".join([path, "copy_number_assignment", "mod", "pkl"]), "wb"))
+
 
 class NaiveHweInformedClustering:
     def __init__(self,
                  copy_number_allele_frequencies = None,
                  copy_number_allele_markers = None):
-
         if (copy_number_allele_frequencies is None
                 or copy_number_allele_markers is None):
             copy_number_allele_frequencies = [0.0295, 0.0275]
             copy_number_allele_markers = [-1, 1]
-
         self.allele_table = pd.DataFrame({
             "freq": copy_number_allele_frequencies,
             "marker": copy_number_allele_markers
         })
-        
         self.add_reference_allel()
-
     def get_copy_number_genotype_frequencies(self):
         allele_table = self.allele_table
         cartesian_allele_table = allele_table.join(
             allele_table, how='cross',
             lsuffix="_first", rsuffix="_second")
-
         cartesian_allele_table['freq_genotype'] = (
                 cartesian_allele_table['freq_first'] * cartesian_allele_table['freq_second'])
-
         cartesian_allele_table['marker_genotype'] = (
                 cartesian_allele_table['marker_first'] + cartesian_allele_table['marker_second'])
-
         genotype_table = cartesian_allele_table.groupby(
             ['marker_genotype']
         ).agg(
             {
                 'freq_genotype': 'sum',
             }).reset_index()
-
         return(genotype_table)
-
     def add_reference_allel(self):
         ref_frequency = 1 - self.allele_table['freq'].sum()
-
         self.allele_table = pd.concat([
             self.allele_table,
             pd.DataFrame({
@@ -895,60 +868,44 @@ class NaiveHweInformedClustering:
                 "marker": [0]
             })
         ])
-
-    def get_copy_number_assignment(self, x_matrix):
+    def get_copy_number_assignment(self, intensities):
         column_axis = 1
-
         genotype_frequencies_ordered = (
             self.get_copy_number_genotype_frequencies()
                 .sort_values(by=['marker_genotype']))
-
         cumulative_frequencies = np.cumsum(
             genotype_frequencies_ordered['freq_genotype'])
-
         ordered_genotype_markers = genotype_frequencies_ordered['marker_genotype']
-
-        break_points = np.quantile(x_matrix, cumulative_frequencies, axis=0)
-
-        genotype_marker_matrix = np.empty(x_matrix.shape, dtype=int)
-
-        for column_index in range(x_matrix.shape[column_axis]):
+        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
+        genotype_marker_matrix = np.empty(intensities.shape, dtype=int)
+        for column_index in range(intensities.shape[column_axis]):
             genotype_marker_matrix[:,column_index] = (
                 ordered_genotype_markers[np.digitize(
-                    x_matrix[:, column_index],
+                    intensities.iloc[:, column_index],
                     break_points[:,column_index],
                     right=True)]
             )
-
         sample_ranking = scipy.stats.rankdata(
             genotype_marker_matrix.sum(axis=column_axis),
             method='ordinal')
-
         # Get for every sample, get the appropriate genotype marker according to their rank
         copy_number_assignment = (
             ordered_genotype_markers[np.digitize(
                 sample_ranking,
                 np.quantile(sample_ranking, cumulative_frequencies),
                 right=True)])
-
-        return copy_number_assignment
-
+        return copy_number_assignment.set_axis(intensities.index)
     def get_centroids(self, x_matrix, copy_number_assignment=None, copy_number_frequencies=None):
         if copy_number_assignment is None:
             copy_number_assignment = self.get_copy_number_assignment(x_matrix).values
-
         if copy_number_frequencies is None:
             copy_number_frequencies = self.get_copy_number_genotype_frequencies()
-
         copy_number_frequencies.index = copy_number_frequencies['marker_genotype']
-
         copy_number_centroids = copy_number_frequencies.apply(
             lambda x:
-                x_matrix[copy_number_assignment == x['marker_genotype']].mean(axis=0),
+                np.nanmean(x_matrix[copy_number_assignment == x['marker_genotype']], axis=0),
             axis=1, result_type='expand')
-
         return copy_number_centroids
-
     def write_output(self, path, naive_copy_number_assignment):
         naive_copy_number_assignment.to_csv(
             ".".join([path, "naive_clustering", "assignments", "csv", "gz"]))
@@ -1052,6 +1009,7 @@ def main(argv=None):
             manifest.names[variant_index],
             manifest.snps[variant_index]))
 
+
     # Get table for the manifest
     manifest_data_frame = pd.DataFrame(
         variant_list, columns=("Chromosome", "Start", "End", "Name", "Alleles"))
@@ -1145,9 +1103,9 @@ def main(argv=None):
         print("Intensity data loaded of shape: ".format(intensity_data_frame.shape), end=os.linesep*2)
         print("Writing intensity data to: {}    {}".format(os.linesep, intensity_data_frame_file_path))
 
-        intensity_data_frame.loc[variants_in_locus.Name].to_csv(
-            intensity_data_frame_file_path,
-            sep="\t", index_label='variant')
+        # intensity_data_frame.loc[variants_in_locus.Name].to_csv(
+        #     intensity_data_frame_file_path,
+        #     sep="\t", index_label='variant')
 
         intensity_matrix_file_path = ".".join([args.out, "mat", value_to_use.replace(" ", "_"), "csv"])
         print("Writing matrix to: {}    {}".format(os.linesep, intensity_matrix_file_path), end=os.linesep*2)
@@ -1156,9 +1114,9 @@ def main(argv=None):
         intensity_data_frame["Sample ID"] = pd.Categorical(intensity_data_frame["Sample ID"])
         intensity_matrix = intensity_data_frame.pivot(
             columns="Sample ID", values=value_to_use)
-        intensity_matrix.to_csv(
-            intensity_matrix_file_path,
-            sep="\t", index_label='variant')
+        # intensity_matrix.to_csv(
+        #     intensity_matrix_file_path,
+        #     sep="\t", index_label='variant')
 
         print("Starting intensity correction...")
 
@@ -1195,28 +1153,34 @@ def main(argv=None):
 
         naive_clustering = NaiveHweInformedClustering()
         naive_copy_number_assignment = naive_clustering.get_copy_number_assignment(
-            corrected_intensities[:,variants_for_naive_clustering.Name.values].values)
+            corrected_intensities[variants_for_naive_clustering.Name.values])
         naive_clustering.write_output(
             args.out, naive_copy_number_assignment)
         print("Naive clustering complete", end=os.linesep*2)
 
         print("Starting intensity CNV calling...")
-        cyp2d6_intensity_cnv_caller = SnpIntensityCnvCaller(clustering_ranges=clustering_ranges,
-                                                            ranges_for_dimensionality_reduction=ranges_for_dimensionality_reduction)
+        cyp2d6_intensity_cnv_caller = SnpIntensityCnvCaller(
+            variants=variants_in_locus,
+            clustering_ranges=clustering_ranges,
+            ranges_for_dimensionality_reduction=ranges_for_dimensionality_reduction)
 
         print("Performing dimensionality reduction...")
         projected_intensities = cyp2d6_intensity_cnv_caller.fit_transform_dimensionality_reduction(
             corrected_intensities, naive_copy_number_assignment)
         print("Disentangling mixtures...")
         weights = np.tile(
-            naive_clustering.get_copy_number_genotype_frequencies()['freq_genotypes'].values,
+            naive_clustering.get_copy_number_genotype_frequencies()['freq_genotype'].values,
             (1, len(clustering_ranges)))
+        centroids = naive_clustering.get_centroids(
+            projected_intensities.values,
+            naive_copy_number_assignment).values
         cyp2d6_intensity_cnv_caller.fit_mixture_models(
-            projected_intensities,
+            projected_intensities.dropna(axis=0),
             weights,
-            naive_clustering.get_centroids(projected_intensities).values)
+            centroids)
         cyp2d6_cnv_probabilities = cyp2d6_intensity_cnv_caller.mixture_model_probabilities(
-            projected_intensities)
+            projected_intensities,
+            naive_clustering.get_copy_number_genotype_frequencies()['marker_genotype'].values)
         print("Mixtures calculated, samples scored.", end=os.linesep*2)
         print("Writing output to {}".format(args.out))
         cyp2d6_intensity_cnv_caller.write_output(
