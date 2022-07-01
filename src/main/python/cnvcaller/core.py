@@ -779,6 +779,8 @@ class SnpIntensityCnvCaller():
         for index, this_range in self._clustering_ranges.as_df().iterrows():
             self._mixture_models[index] = self._fit_mixture_model(
                 this_range, intensities, centroids, weights)
+            print("Is converged?")
+            print(self._mixture_models[index].converged_)
     def _fit_mixture_model(self, this_range, intensities, centroids, weights):
         # Slice the x_matrix columns to keep those that are in this range
         # x_matrix columns should match with the ranges in dimensionality reduction
@@ -789,7 +791,8 @@ class SnpIntensityCnvCaller():
         mixture_model = sklearn.mixture.GaussianMixture(
             n_components=weights[range_index].shape[0],
             weights_init=weights[range_index],
-            means_init=centroids_per_feature)
+            means_init=centroids_per_feature,
+            max_iter = 1000)
         return mixture_model.fit(intensities.loc[:,indices_from_input])
     def mixture_model_probabilities(self, intensities, labels):
         index, this_range = next(self._clustering_ranges.as_df().iterrows())
