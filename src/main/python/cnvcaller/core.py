@@ -20,6 +20,7 @@ A copy of the GNU General Public License can be found in the LICENSE file in the
 root directory of this source tree. If not, see <https://www.gnu.org/licenses/>.
 """
 
+import argparse
 # Standard imports.
 import enum
 import io
@@ -27,11 +28,8 @@ import os
 import pickle
 import re
 import sys
-import argparse
-import yaml
-import re
-import copy
 
+import IlluminaBeadArrayFiles
 import numpy as np
 import pandas as pd
 import pyranges
@@ -39,7 +37,7 @@ import scipy.stats
 import sklearn.decomposition
 import sklearn.discriminant_analysis
 import sklearn.mixture
-import IlluminaBeadArrayFiles
+import yaml
 
 # Metadata
 __program__ = "CNV-caller"
@@ -55,6 +53,11 @@ __description__ = "{} is a program developed and maintained by {}. " \
                                         __license__)
 
 # Constants
+from sklearn.mixture._gaussian_mixture import _estimate_gaussian_covariances_full, _estimate_log_gaussian_prob, \
+    _compute_precision_cholesky
+
+from python.cnvcaller.NestedGuassianMixture import ComplexFeatureDataset
+
 DEFAULT_FINAL_REPORT_COLS = {"Sample ID": 'str', "SNP Name": 'str', "GType": 'str', "SNP": 'str',
                              "X": 'float', "Y": 'float', "B Allele Freq": 'float', "Log R Ratio": 'float'}
 AUTOSOMES_CHR = ["{}".format(chrom) for chrom in range(1, 23)]
@@ -526,13 +529,13 @@ class IntensityCorrection:
     def __init__(self, variant_list_for_locus, pca_n_components=None,
                  pca_over_samples=True,
                  pca_scaling=True, regression_fit_intercept=True):
+        self._regression_fit_intercept = regression_fit_intercept
         self._reference_sample_means = None
         self._pca_over_samples = pca_over_samples
         self._target_variants = variant_list_for_locus
         self._scale = pca_scaling
         self.pca_n_components = pca_n_components
-        self._correction_model = sklearn.linear_model.LinearRegression(
-            fit_intercept=regression_fit_intercept)
+        self._correction_models = [None] * len(self._target_variants)
         self._standardize_scaler = sklearn.preprocessing.StandardScaler()
         self._fitted_reference_variants = None
         self._pca_fit = None
@@ -545,17 +548,22 @@ class IntensityCorrection:
                                        :, self._target_variants]
         target_intensity_data_preprocessed = pd.DataFrame(
             sklearn.preprocessing.StandardScaler(with_std=False)
-            .fit_transform(target_intensity_data_sliced),
+                .fit_transform(target_intensity_data_sliced),
             columns=target_intensity_data_sliced.columns,
             index=target_intensity_data_sliced.index
         )
         # Fit the correction model
-        self._correction_model.fit(
-            batch_effects, target_intensity_data_preprocessed)
+        self._correction_models = target_intensity_data_preprocessed.apply(
+            lambda y: self._fit_correction_model(batch_effects, y))
         # Write intensities of locus of interest corrected for batch effects.
         corrected_intensities = self._correct_batch_effects(
             target_intensity_data_sliced, batch_effects)
         return corrected_intensities
+    def _fit_correction_model(self, batch_effects, y):
+        regression_model = sklearn.linear_model.LinearRegression(
+            fit_intercept=self._regression_fit_intercept)
+        nan_mask = y.notna()
+        return regression_model.fit(batch_effects[nan_mask], y[nan_mask])
     def batch_effects_train(self, reference_intensity_data):
         # First prepare the reference intensity data.
         # On this reference intensity data, we base the batch effects.
@@ -629,7 +637,7 @@ class IntensityCorrection:
             print("Calculating principal components over samples")
             self._reference_sample_means = intensity_data_preprocessed.mean(axis=1)
             intensity_data_centered = (
-                intensity_data_preprocessed.T - self._reference_sample_means)
+                    intensity_data_preprocessed.T - self._reference_sample_means)
             # Now, if we should do a pca over the samples instead of
             # over the columns (variants), we transpose the
             # the intensity data frame, and fit the PCA on this matrix
@@ -662,8 +670,8 @@ class IntensityCorrection:
     def _pca_transform(self, intensity_data_preprocessed):
         if self._pca_over_samples:
             intensity_data_centered = (
-                intensity_data_preprocessed.T
-                - intensity_data_preprocessed.mean(axis=1))
+                    intensity_data_preprocessed.T
+                    - intensity_data_preprocessed.mean(axis=1))
             # We need to get the projections of the fit over samples now
             # We can calculate the batch effects for our samples using the following code,
             # wherein the x matrix represents the least squares solution to the
@@ -697,8 +705,10 @@ class IntensityCorrection:
         # Here, we predict the batch effects on the locus of interest.
         # Using the predicted batch effects, we can correct the locus of interest for the
         # expected batch effects.
-        predicted_batch_effects_in_locus_of_interest = self._correction_model.predict(
-            principal_components)
+        print(target_intensity_data_sliced)
+        predicted_batch_effects_in_locus_of_interest = np.array(
+            [self._correction_models[index].predict(principal_components)
+             for index, column in enumerate(target_intensity_data_sliced)]).T
         print(predicted_batch_effects_in_locus_of_interest.shape)
         print(np.mean(predicted_batch_effects_in_locus_of_interest, axis=None))
         # We can correct the locus of interest by subtracting the predicted batch effects
@@ -726,11 +736,152 @@ class IntensityCorrection:
     def outliers(self):
         raise NotImplementedError()
         # Loop through all requested principal components,
-        # marking each sample that is outside of the mean -/+ x*sd
+    # marking each sample that is outside of the mean -/+ x*sd
     def in_fitted_reference_variants(self, intensity_data):
         return np.logical_and(
             intensity_data.columns.isin(self._fitted_reference_variants),
             ~intensity_data.isnull().any(axis=0))
+
+
+class NaiveHweInformedClustering:
+    COLUMN_INDEX = 1
+    def __init__(
+            self,
+            copy_number_allele_frequencies = None,
+            copy_number_allele_markers = None,
+            genotype_labels = None,
+            ref_genotype = 2
+    ):
+        self.ref_genotype = ref_genotype
+        if (copy_number_allele_frequencies is None
+                or copy_number_allele_markers is None):
+            copy_number_allele_frequencies = [0.0295, 0.0275]
+            copy_number_allele_markers = [-1, 1]
+        self.allele_table = pd.DataFrame({
+            "freq": copy_number_allele_frequencies,
+            "marker": copy_number_allele_markers
+        })
+        self.add_reference_allel()
+        self.genotypes = np.array(genotype_labels)
+        self.genotype_label = "marker_genotype"
+    def get_copy_number_genotype_frequencies(self):
+        allele_table = self.allele_table
+        cartesian_allele_table = allele_table.join(
+            allele_table, how='cross',
+            lsuffix="_first", rsuffix="_second")
+        cartesian_allele_table['freq_genotype'] = (
+                cartesian_allele_table['freq_first'] * cartesian_allele_table['freq_second'])
+        cartesian_allele_table[self.genotype_label] = (
+                cartesian_allele_table['marker_first'] + cartesian_allele_table['marker_second'])
+        genotype_table = cartesian_allele_table.groupby(
+            [self.genotype_label]
+        ).agg(
+            {
+                'freq_genotype': 'sum',
+            }).reset_index()
+        genotype_table = genotype_table.loc[np.logical_or(
+            self.genotypes is None,
+            genotype_table[self.genotype_label].isin(np.array(self.genotypes))),]
+        genotype_table['freq_genotype']/=genotype_table['freq_genotype'].sum()
+        return genotype_table
+    def add_reference_allel(self):
+        ref_frequency = 1 - self.allele_table['freq'].sum()
+        self.allele_table = pd.concat([
+            self.allele_table,
+            pd.DataFrame({
+                "freq": [ref_frequency],
+                "marker": [0]
+            })
+        ])
+    def get_copy_number_assignment(self, intensities, genotype_frequencies=None):
+        if genotype_frequencies is None:
+            genotype_frequencies = self.get_copy_number_genotype_frequencies()
+        genotype_frequencies_ordered = genotype_frequencies.sort_values(by=[self.genotype_label])
+        cumulative_frequencies = np.cumsum(
+            genotype_frequencies_ordered['freq_genotype'])
+        ordered_genotype_markers = genotype_frequencies_ordered[self.genotype_label]
+        genotype_marker_matrix = self.get_votes(
+            cumulative_frequencies, intensities, ordered_genotype_markers)
+        # Do at least half of the intensity variables agree?
+        # Get the frequency of the most frequent item in the list
+        voting_result = np.apply_along_axis(
+            lambda x: self.vote(x),
+            axis=self.COLUMN_INDEX,
+            arr=genotype_marker_matrix)
+        return pd.Series(voting_result, index=intensities.index, name=self.genotype_label)
+    def get_votes(self, cumulative_frequencies, intensities, ordered_genotype_markers):
+        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
+        genotype_marker_matrix = np.empty(intensities.shape, dtype=int)
+        for column_index in range(intensities.shape[self.COLUMN_INDEX]):
+            genotype_marker_matrix[:, column_index] = (
+                ordered_genotype_markers[np.digitize(
+                    intensities.iloc[:, column_index],
+                    break_points[:, column_index],
+                    right=True)]
+            )
+        return genotype_marker_matrix
+    def vote(self, votes):
+        mode_result = scipy.stats.mode(votes, nan_policy='propagate')
+        if mode_result.count[0] > (0.5 * len(votes)):
+            return float(mode_result.mode[0])
+        print(mode_result.count[0] > (0.5 * len(votes)))
+        return np.NaN
+    def get_centroids(self, intensities, copy_number_assignment=None, copy_number_frequencies=None):
+        if copy_number_assignment is None:
+            copy_number_assignment = self.get_copy_number_assignment(intensities).values
+        if copy_number_frequencies is None:
+            copy_number_frequencies = self.get_copy_number_genotype_frequencies()
+        copy_number_frequencies.index = copy_number_frequencies[self.genotype_label]
+        copy_number_centroids = copy_number_frequencies.apply(
+            lambda x:
+                intensities[copy_number_assignment == x[self.genotype_label]].mean(axis=0),
+            axis=1, result_type='expand')
+        print(copy_number_centroids)
+        return copy_number_centroids
+    def maximum_haplotype_counts(self):
+        return dict(zip(self.genotypes, self.genotypes + self.ref_genotype + 1))
+    def write_output(self, path, naive_copy_number_assignment):
+        naive_copy_number_assignment.to_csv(
+            ".".join([path, "naive_clustering", "assignments", "csv", "gz"]))
+    def update_assignments_gaussian(self, intensities, genotype_frequencies=None):
+        if genotype_frequencies is None:
+            genotype_frequencies = self.get_copy_number_genotype_frequencies()
+        assignments = self.get_copy_number_assignment(intensities, genotype_frequencies)
+        # Resp
+        # resp = np.equal.outer(assignments, self.genotypes).astype(float)
+        print(assignments)
+        resp = np.array(
+            [(assignments == genotype) for genotype in self.genotypes]).astype(float).T
+        print(resp)
+        # nk
+        nk = resp.sum(axis=0) + 10 * np.finfo(resp.dtype).eps
+        # means
+        print(nk)
+        means = self.get_centroids(
+            intensities,
+            copy_number_assignment=assignments,
+            copy_number_frequencies=genotype_frequencies).values
+        print(means.shape)
+        print(intensities.values.shape)
+        print(nk.shape)
+        print(resp.shape)
+        # Covariances
+        covariances = _estimate_gaussian_covariances_full(
+            resp, intensities.values, nk, means, reg_covar=1e-6)
+        print(covariances)
+        # Precision
+        precisions_cholesky = _compute_precision_cholesky(
+            covariances, "full"
+        )
+        print(precisions_cholesky)
+        argmax = np.log(genotype_frequencies.values)
+        print(argmax)
+        labels_updated = (
+                _estimate_log_gaussian_prob(intensities.values, means, precisions_cholesky, "full")
+                + (np.log(genotype_frequencies['freq_genotype'].values)[np.newaxis,:])).argmax(axis=1)
+        assignments[...] = (
+            labels_updated + min(genotype_frequencies[self.genotype_label]))
+        return assignments
 
 
 class SnpIntensityCnvCaller():
@@ -744,66 +895,69 @@ class SnpIntensityCnvCaller():
     of the predefined ranges performs
     _
     """
-    def __init__(self, variants, clustering_ranges, ranges_for_dimensionality_reduction):
+    def __init__(self, genotype_labels, variants, clustering_ranges,
+                 ranges_for_dimensionality_reduction=None, clustering_max_iter=1000):
+        self.clustering_max_iter = clustering_max_iter
+        self.labels = genotype_labels
         self._variants = self.insert_indices(variants)
-        self._ranges_for_dimensionality_reduction = self.insert_indices(
-            ranges_for_dimensionality_reduction)
         self._clustering_ranges = self.insert_indices(clustering_ranges)
-        self._dimensionality_reduction_models = [None] * len(self._ranges_for_dimensionality_reduction)
-        self._mixture_models = [None] * len(self._clustering_ranges)
+        if ranges_for_dimensionality_reduction is not None:
+            self._ranges_for_dimensionality_reduction = self.insert_indices(
+                ranges_for_dimensionality_reduction)
+            self._dimensionality_reduction_models = [None] * len(self._ranges_for_dimensionality_reduction)
+            self._dimensionality_reduction_range_mapping = self.merge_ranges(
+                self._variants, self._ranges_for_dimensionality_reduction)
+        self._mixture_model = None
         # For each dimensionality reduction range, get which ranges for the dimensionality reduction are involved
-        self._dimensionality_reduction_range_mapping = self._ranges_for_dimensionality_reduction.join(
-            self._variants,
+    def merge_ranges(self, ranges, ranges_other):
+        if ranges is None or ranges_other is None:
+            return None
+        intersecting_column_names = (
+            ranges.df.intersection(ranges_other.df)
+                .difference(pd.Series(["Chrom", "Start", "End", "Index"])))
+        if len(intersecting_column_names) > 0:
+            return ranges_other.merge(
+                ranges, how='left', by=intersecting_column_names, slack=1).as_df()[['Index', 'Index_b']]
+        return ranges_other.join(ranges,
             how='left', slack=1).as_df()[['Index', 'Index_b']]
-        # For each clustering range, get which ranges for the dimensionality reduction are involved
-        self._mixture_model_range_mapping = self._clustering_ranges.join(
-            self._ranges_for_dimensionality_reduction,
-            how='left', slack=1).as_df()[['Index', 'Index_b']]
-    def fit_transform_dimensionality_reduction(self, intensities, cluster_assignment):
+    def fit_transform_dimensionality_reduction(self, features, cluster_assignment):
         intensities_projected = np.empty(
-            shape=(intensities.shape[0], len(self._ranges_for_dimensionality_reduction)))
+            shape=(features.shape[0], len(self._ranges_for_dimensionality_reduction)))
         for index, this_range in self._ranges_for_dimensionality_reduction.as_df().iterrows():
             range_index = this_range.Index
             indices_from_input = self._dimensionality_reduction_range_mapping.loc[
                 self._dimensionality_reduction_range_mapping['Index'] == range_index, 'Index_b']
             discriminant_analysis = sklearn.discriminant_analysis.LinearDiscriminantAnalysis(n_components=1)
+            features_wide = features[self._variants.df.loc[indices_from_input, "Name"]].unstack(level="feature")
             transform = discriminant_analysis.fit_transform(
-                intensities[self._variants.df.loc[indices_from_input, "Name"]], cluster_assignment)
+                features_wide, cluster_assignment)
             print(transform[:,0])
             intensities_projected[:,index] = transform[:,0]
             self._dimensionality_reduction_models[index] = discriminant_analysis
         return pd.DataFrame(
-            intensities_projected, index=intensities.index)
+            intensities_projected, index=features.index)
     def fit_mixture_models(self, intensities, weights, centroids):
         # Range is a pyranges object.
-        for index, this_range in self._clustering_ranges.as_df().iterrows():
-            self._mixture_models[index] = self._fit_mixture_model(
-                this_range, intensities, centroids, weights)
-            print("Is converged?")
-            print(self._mixture_models[index].converged_)
-    def _fit_mixture_model(self, this_range, intensities, centroids, weights):
+        self._mixture_model = self._fit_mixture_model(intensities, centroids, weights)
+        print("Is converged?")
+        print(self._mixture_model.converged_)
+    def _fit_mixture_model(self, intensities, centroids, weights):
         # Slice the x_matrix columns to keep those that are in this range
         # x_matrix columns should match with the ranges in dimensionality reduction
-        range_index = this_range.Index
-        indices_from_input = self._mixture_model_range_mapping.loc[
-            self._mixture_model_range_mapping['Index'] == range_index, 'Index_b']
-        centroids_per_feature = centroids[:,indices_from_input]
         mixture_model = sklearn.mixture.GaussianMixture(
-            n_components=weights[range_index].shape[0],
-            weights_init=weights[range_index],
-            means_init=centroids_per_feature,
-            max_iter = 1000)
-        return mixture_model.fit(intensities.loc[:,indices_from_input])
-    def mixture_model_probabilities(self, intensities, labels):
-        index, this_range = next(self._clustering_ranges.as_df().iterrows())
+            n_components=weights.shape[0],
+            means_init=centroids,
+            weights_init=weights,
+            max_iter=self.clustering_max_iter)
+        return mixture_model.fit(intensities)
+    def mixture_model_probabilities(self, intensities):
         return pd.DataFrame(
-            self._predict_mixture_model(this_range, intensities),
+            self._predict_mixture_model(intensities),
             index=intensities.index,
-            columns=labels)
+            columns=self.labels)
     def mixture_model_probabilities_per_feature(self, intensities, labels):
-        index, this_range = next(self._clustering_ranges.as_df().iterrows())
         return pd.DataFrame(
-            self._predict_mixture_model(this_range, intensities),
+            self._predict_mixture_model(intensities),
             index=intensities.index,
             columns=labels)
     def copy_numbers(self, intensities):
@@ -815,103 +969,31 @@ class SnpIntensityCnvCaller():
         # We can do this by ascertaining for each sample what
         # combination of cnv calls is most probable
         pass
-    def _predict_mixture_model(self, this_range, intensities):
-        range_index = this_range.Index
-        indices_from_input = self._mixture_model_range_mapping.loc[self._mixture_model_range_mapping['Index'] == range_index, 'Index_b']
-        return self._mixture_models[range_index].predict_proba(intensities.loc[:,indices_from_input])
+    def _predict_mixture_model(self, intensities):
+        return self._mixture_model.predict_proba(intensities)
     def insert_indices(self, ranges):
+        if ranges is None:
+            return None
         return ranges.insert(pd.Series(
             np.arange(len(ranges)),
             name="Index"))
-    def write_output(self, path, projected_intensities, copy_number_probabilities):
+    def write_output(self, path, copy_number_probabilities,
+                     copy_number_centroids_initial, projected_intensities=None):
         copy_number_probabilities.to_csv(
             ".".join([path, "copy_number_assignment", "probabilities", "csv", "gz"]))
-        projected_intensities.to_csv(
-            ".".join([path, "copy_number_assignment", "projected_intensities", "csv", "gz"]))
+        if projected_intensities is not None:
+            projected_intensities.to_csv(
+                ".".join([path, "copy_number_assignment", "projected_intensities", "csv", "gz"]))
+        copy_number_centroids_initial.to_csv(
+            ".".join([path, "copy_number_assignment", "centroids_initial", "csv", "gz"]))
     def write_fit(self, path):
         pickle.dump(self, open(
             ".".join([path, "copy_number_assignment", "mod", "pkl"]), "wb"))
+        pd.DataFrame(self._mixture_model.means_,
+                     columns=self._variants.Name,
+                     index=pd.Index(self.labels, name="marker_genotype")).to_csv(
+            ".".join([path, "copy_number_assignment", "centroids_fit", "csv", "gz"]))
 
-
-class NaiveHweInformedClustering:
-    def __init__(self,
-                 copy_number_allele_frequencies = None,
-                 copy_number_allele_markers = None):
-        if (copy_number_allele_frequencies is None
-                or copy_number_allele_markers is None):
-            copy_number_allele_frequencies = [0.0295, 0.0275]
-            copy_number_allele_markers = [-1, 1]
-        self.allele_table = pd.DataFrame({
-            "freq": copy_number_allele_frequencies,
-            "marker": copy_number_allele_markers
-        })
-        self.add_reference_allel()
-    def get_copy_number_genotype_frequencies(self):
-        allele_table = self.allele_table
-        cartesian_allele_table = allele_table.join(
-            allele_table, how='cross',
-            lsuffix="_first", rsuffix="_second")
-        cartesian_allele_table['freq_genotype'] = (
-                cartesian_allele_table['freq_first'] * cartesian_allele_table['freq_second'])
-        cartesian_allele_table['marker_genotype'] = (
-                cartesian_allele_table['marker_first'] + cartesian_allele_table['marker_second'])
-        genotype_table = cartesian_allele_table.groupby(
-            ['marker_genotype']
-        ).agg(
-            {
-                'freq_genotype': 'sum',
-            }).reset_index()
-        return(genotype_table)
-    def add_reference_allel(self):
-        ref_frequency = 1 - self.allele_table['freq'].sum()
-        self.allele_table = pd.concat([
-            self.allele_table,
-            pd.DataFrame({
-                "freq": [ref_frequency],
-                "marker": [0]
-            })
-        ])
-    def get_copy_number_assignment(self, intensities):
-        column_axis = 1
-        genotype_frequencies_ordered = (
-            self.get_copy_number_genotype_frequencies()
-                .sort_values(by=['marker_genotype']))
-        cumulative_frequencies = np.cumsum(
-            genotype_frequencies_ordered['freq_genotype'])
-        ordered_genotype_markers = genotype_frequencies_ordered['marker_genotype']
-        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
-        genotype_marker_matrix = np.empty(intensities.shape, dtype=int)
-        for column_index in range(intensities.shape[column_axis]):
-            genotype_marker_matrix[:,column_index] = (
-                ordered_genotype_markers[np.digitize(
-                    intensities.iloc[:, column_index],
-                    break_points[:,column_index],
-                    right=True)]
-            )
-        sample_ranking = scipy.stats.rankdata(
-            genotype_marker_matrix.sum(axis=column_axis),
-            method='ordinal')
-        # Get for every sample, get the appropriate genotype marker according to their rank
-        copy_number_assignment = (
-            ordered_genotype_markers[np.digitize(
-                sample_ranking,
-                np.quantile(sample_ranking, cumulative_frequencies),
-                right=True)])
-        return copy_number_assignment.set_axis(intensities.index)
-    def get_centroids(self, x_matrix, copy_number_assignment=None, copy_number_frequencies=None):
-        if copy_number_assignment is None:
-            copy_number_assignment = self.get_copy_number_assignment(x_matrix).values
-        if copy_number_frequencies is None:
-            copy_number_frequencies = self.get_copy_number_genotype_frequencies()
-        copy_number_frequencies.index = copy_number_frequencies['marker_genotype']
-        copy_number_centroids = copy_number_frequencies.apply(
-            lambda x:
-                np.nanmean(x_matrix[copy_number_assignment == x['marker_genotype']], axis=0),
-            axis=1, result_type='expand')
-        return copy_number_centroids
-    def write_output(self, path, naive_copy_number_assignment):
-        naive_copy_number_assignment.to_csv(
-            ".".join([path, "naive_clustering", "assignments", "csv", "gz"]))
 
 # Functions
 def ranges_from_file(file_path):
@@ -928,14 +1010,17 @@ def calculate_downsampling_factor(grouped_data_frame, N):
     return grouped_data_frame
 
 def load_ranges_from_config(path_or_list_of_dicts):
-    if isinstance(path_or_list_of_dicts, str):
-        return pyranges.PyRanges(pd.read_csv(
-            path_or_list_of_dicts, index_col=False,
-            names=("Chromosome", "Start", "End"),
-            dtype={"Chromosome": str},
-            sep="\t"))
+    ranges_data_frame = None
+    if path_or_list_of_dicts is None:
+        return None
+    elif isinstance(path_or_list_of_dicts, str):
+        ranges_data_frame = pd.read_csv(
+            path_or_list_of_dicts, index_col=False, header=None, dtype={0: str}, sep="\t")
+    else:
+        ranges_data_frame = pd.DataFrame(path_or_list_of_dicts)
+    ranges_data_frame.columns = np.array(["Chromosome", "Start", "End", "Name"])[0:ranges_data_frame.shape[1]]
     return pyranges.PyRanges(
-        pd.DataFrame(path_or_list_of_dicts, columns=["Chromosome", "Start", "End"]))
+        ranges_data_frame)
 
 def draw_variants_proportionate(grouped_data_frame, max_downsampling_factor):
     print(grouped_data_frame)
@@ -1080,28 +1165,33 @@ def main(argv=None):
 
     variants_to_read = variants_to_read[~variants_to_read.Name.duplicated()]
 
-    if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
-        # Get intensity data
-        intensity_data_reader = FinalReportGenotypeDataReader(
-            args.final_report_file_path,
-            sample_list["Sample_ID"].values,
-            variants_to_read.as_df())
-
-        intensity_data = intensity_data_reader.read_intensity_data()
-
-        intensity_data.to_pickle(args.out)
-
     intensity_data_frame_file_path = ".".join([args.out, "intensity_data_frame", "csv.gz"])
+
+    if parser.is_action_requested(ArgumentParser.SubCommand.DATA):
+            # Get intensity data
+            intensity_data_reader = FinalReportGenotypeDataReader(
+                args.final_report_file_path,
+                sample_list["Sample_ID"].values,
+                variants_to_read.as_df())
+
+            intensity_data = intensity_data_reader.read_intensity_data()
+
+            intensity_data.to_pickle(args.out)
 
     if parser.is_action_requested(ArgumentParser.SubCommand.FIT):
         # Get batch correction configuration
         value_to_use = args.config['base']['value']
         intensity_correction_parameters = args.config['batch correction']
+        cnv_calling_parameters = args.config['cnv calling']
 
         # Load intensity data
         print("Loading intensity data...")
         intensity_data_frame_reader = IntensityDataReader(sample_list["Sample_ID"])
         intensity_data_frame = intensity_data_frame_reader.load(args.input)
+        intensity_data_frame["R_hypoteneuse"] = np.hypot(
+            intensity_data_frame["X"], intensity_data_frame["Y"])
+        intensity_data_frame["theta"] = np.arctan(
+            intensity_data_frame["Y"] / intensity_data_frame["X"])
 
         print("Intensity data loaded of shape: ".format(intensity_data_frame.shape), end=os.linesep*2)
         print("Writing intensity data to: {}    {}".format(os.linesep, intensity_data_frame_file_path))
@@ -1117,6 +1207,11 @@ def main(argv=None):
         intensity_data_frame["Sample ID"] = pd.Categorical(intensity_data_frame["Sample ID"])
         intensity_matrix = intensity_data_frame.pivot(
             columns="Sample ID", values=value_to_use)
+        a_matrix = intensity_data_frame.pivot(
+            columns="Sample ID", values="X").T[variants_in_locus.Name]
+        b_matrix = intensity_data_frame.pivot(
+            columns="Sample ID", values="Y").T[variants_in_locus.Name]
+
         # intensity_matrix.to_csv(
         #     intensity_matrix_file_path,
         #     sep="\t", index_label='variant')
@@ -1147,6 +1242,8 @@ def main(argv=None):
         print("Starting naive clustering...")
         ranges_for_naive_clustering = load_ranges_from_config(
             args.config['naive clustering'])
+        variant_selection = load_ranges_from_config(
+            args.config['variant selection'])
         ranges_for_dimensionality_reduction = load_ranges_from_config(
             args.config['dimensionality reduction'])
         clustering_ranges = load_ranges_from_config(
@@ -1154,41 +1251,70 @@ def main(argv=None):
 
         variants_for_naive_clustering = variants_in_locus.overlap(ranges_for_naive_clustering)
 
-        naive_clustering = NaiveHweInformedClustering()
+        naive_clustering = NaiveHweInformedClustering(
+            genotype_labels=[-2, -1, 0, 1], ref_genotype = 2)
+        copy_number_frequencies = naive_clustering.get_copy_number_genotype_frequencies()
         naive_copy_number_assignment = naive_clustering.get_copy_number_assignment(
-            corrected_intensities[variants_for_naive_clustering.Name.values])
+            corrected_intensities[variants_for_naive_clustering.Name.values],
+            copy_number_frequencies)
+        max_haplotype_counts = naive_clustering.maximum_haplotype_counts()
         naive_clustering.write_output(
             args.out, naive_copy_number_assignment)
         print("Naive clustering complete", end=os.linesep*2)
+        less_naive_copy_number_assignment = naive_clustering.update_assignments_gaussian(
+            corrected_intensities[variants_for_naive_clustering.Name.values])
+
+        correction_factor = (
+                corrected_intensities /
+                intensity_matrix.T[variants_in_locus.Name])
+
+        feature_matrix_a = a_matrix * correction_factor
+        feature_matrix_b = b_matrix * correction_factor
+        feature_matrix_ab = pd.concat(
+            [feature_matrix_a, feature_matrix_b],
+            keys=["A", "B"], names=["subspace", corrected_intensities.columns.name], axis=1)
+
+        complex_feature_dataset = ComplexFeatureDataset(
+            feature_matrix_ab.xs(
+                key="rs1135840",
+                level=1, axis=1,drop_level=False))
+        complex_feature_dataset.featurize_over_components(
+            less_naive_copy_number_assignment, max_haplotype_counts)
 
         print("Starting intensity CNV calling...")
         cyp2d6_intensity_cnv_caller = SnpIntensityCnvCaller(
-            variants=variants_in_locus,
+            variants=variant_selection,
             clustering_ranges=clustering_ranges,
-            ranges_for_dimensionality_reduction=ranges_for_dimensionality_reduction)
+            ranges_for_dimensionality_reduction=ranges_for_dimensionality_reduction,
+            **cnv_calling_parameters)
 
-        print("Performing dimensionality reduction...")
+        # print("Performing dimensionality reduction...")
+        # Per cnv status moeten we uitrekenen hoeveel clusters we maximaal verwachten in x,y space.
+        # Dit is eigenlijk gelijk aan het aantal kopieën plus 1.
+
+        # Vervolgens moeten we de complex features fitten op basis van de naive clustering
+
+
         projected_intensities = cyp2d6_intensity_cnv_caller.fit_transform_dimensionality_reduction(
-            corrected_intensities, naive_copy_number_assignment)
+            feature_matrix, naive_copy_number_assignment)
         print("Disentangling mixtures...")
-        weights = np.tile(
-            naive_clustering.get_copy_number_genotype_frequencies()['freq_genotype'].values,
-            (1, len(clustering_ranges)))
+        weights = copy_number_frequencies['freq_genotype']
         centroids = naive_clustering.get_centroids(
-            projected_intensities.values,
-            naive_copy_number_assignment).values
+            corrected_intensities,
+            naive_copy_number_assignment,
+            copy_number_frequencies)
         cyp2d6_intensity_cnv_caller.fit_mixture_models(
             projected_intensities.dropna(axis=0),
             weights,
-            centroids)
+            centroids.values)
         cyp2d6_cnv_probabilities = cyp2d6_intensity_cnv_caller.mixture_model_probabilities(
-            projected_intensities,
-            naive_clustering.get_copy_number_genotype_frequencies()['marker_genotype'].values)
+            projected_intensities)
         print("Mixtures calculated, samples scored.", end=os.linesep*2)
         print("Writing output to {}".format(args.out))
         cyp2d6_intensity_cnv_caller.write_output(
             args.out,
             projected_intensities=projected_intensities,
+            copy_number_centroids_initial=centroids,
             copy_number_probabilities=cyp2d6_cnv_probabilities)
         cyp2d6_intensity_cnv_caller.write_fit(
             args.out
@@ -1220,10 +1346,7 @@ def main(argv=None):
             target_intensity_data=intensity_matrix.T)
 
         # Write output for intensity correction
-        intensity_correction.write_output(
-            args.out,
-            corrected_intensities=corrected_intensities,
-            batch_effects=batch_effects)
+        intensity_correction.write_output(args.out,,
 
     # args.
 
