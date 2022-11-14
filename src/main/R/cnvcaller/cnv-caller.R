@@ -27,7 +27,6 @@ library(ggbio)
 library(tidyverse)
 library(argparse)
 library(tools)
-
 # Declare constants
 
 ## Argument parser
@@ -53,9 +52,10 @@ theme_update(line = element_line(
 
 # Declare function definitions
 
-#' Get the eigenvalues that explain most of the variation
+#' Get the eigenvectors that explain most of the variation
 #'
-#' @description Gets the eigenvalues that explain most of the variation.
+#' @description Gets the eigenvectors, or loadings, with which
+#' the principal components can be obtained
 #'
 #' @param genotypeData Genotype data as a matrix.
 #' @param variants Variants that are to be used in correction.
@@ -68,20 +68,62 @@ correctionEigenvalues <- function(genotypeData, variants) {
   # Return for these correction eigenvalues
 }
 
+#' Get the variants that are sufficient for identifying batch effects
+#'
+#' @description Function that gets the variants that are sufficient for
+#' batch effects. Variants are selected based on the locus of interest.
+#' Variants may not be within this locus. Additionally, SNPs should have
+#' a HWE p < 0.01, a minor allele frequency > 5%, they should be equally
+#' distributed across all chromosomes and approximately in linkage
+#' equilibrium (r2 < 0.4).
+#'
+#' @param genotype_data Genotype data as a matrix.
+#' @param locus_of_interest Locus to exlude variants from
+#'
+#' @return Loadings that correct batch effects.
+#'
+get_variants_for_batch_correction <- function(genotype_data, locus_of_interest) {
+  # The locus of interest is a GRanges object. In this object,
+  # multiple ranges can be included. Therefore, we loop over
+  # each of these ranges.
+  for (index in seq(elementNROWS(locus_of_interest)))
+  locusOfInterest$ranges
+}
 
-## Correct intensities for variants in the locus of interest.
+#' Correct intensities for variants in the locus of interest.
+#'
+#' @description Corrects the intensities for variants within
+#' the locus of interest.
+#'
+#' @param genotypeData Genotype data as a matrix.
+#' @param locusOfInterest The locus of interest.
+#' @param config
+#'
+#' @return Corrected batch effects.
+#'
 correctIntensities <- function(genotypeData, locusOfInterest, config) {
+  variants <- getVariantsForCorrections(gentoypeData, locusOfInterest)
   # Perform eigenvector Decomposition performed on the sample intensity correlation matrix
   eigenvaluesOfTopPrincipalComponents <- correctionEigenvalues(genotypeData, variants)
   # Correct per sample intensities
+  return(correctedGenotypeData)
 }
 
 
-## Perform PCA over variants in locus.
+#' Identify principal components for locus
+#'
+#' @description Function that for a specific locus,
+#' returns the data projected on principal components.
+#'
+#' @param correctedGenotypeData genotype data in a locus without batch effects.
+#'
+#' @return Genotype data projected on principal components.
+#'
 pcaOverVariantsInLocus <- function(correctedGenotypeData) {
-
+  projectedOnPrincipalComponents <- prcomp(
+    correctedGenotypeData, center = TRUE, scale. = TRUE)
+  return(projectedOnPrincipalComponents)
 }
-
 
 ## Variants in locus
 extractLocus <- function(geneId, genomeBuild = "37") {
@@ -100,13 +142,38 @@ extractLocus <- function(geneId, genomeBuild = "37") {
   return(locusOfInterest)
 }
 
+read_feature_file <- function(haplotype_bed1_file, feature_name) {
 
-### Main
-main <- function(args=NULL) {
-  if (is.null(args)) {
-    # Process input
-    args <- parser$parse_args()
+  # Load a bed file (1-indexed) that contains the columns,
+  # chrom, chromStart, chromEnd and name
+  bed_table <- fread(
+    haplotype_bed1_file,
+    col.names = c("chrom", "chromStart", "chromEnd", "name"))
+
+  # Select the rows that match the requested feature
+  bed_table <- bed_table[bed_table$name == feature_name,]
+
+  # Build a GRanges object from the bed file
+  locus_of_interest <- GRanges(
+    seqnames = bed_table$chrom,
+    ranges = IRanges(start = bed_table$chromStart, end = bed_table$chromEnd),
+    featureName = bed_table$name)
+
+  return(locus_of_interest)
+}
+
+# Main
+
+#' Execute main
+#'
+#' @param argv A vector of arguments normally supplied via command-line.
+main <- function(argv=NULL) {
+  if (is.null(argv)) {
+    argv <- commandArgs(trailingOnly = T)
   }
+
+  # Parse arguments
+  args <- parser$parse(argv)
 
   # Check if the file exists and has reading permission
   if (!(file.exists(args$config)
@@ -129,13 +196,29 @@ main <- function(args=NULL) {
   # Load genotype data
 
   # Get the variants that are in the locus of interest
-  locusOfInterest <- extractLocus(1565)
+  if (!is.null(config$geneId)) {
+    locusOfInterest <- extractLocus(1565)
+  } else {
+    locusOfInterest <- read_feature_file(config$bedFilePath, config$featureName)
+  }
+
+  # We want to identify all variants that are in the locus of interest.
+  variantsInLocus <- extractVariants(locusOfInterest)
 
   # Correct intensities in the locus of interest using a selection of
   # samples outside of the locus of interest
-  correctIntensities(genotypeData = NULL,
-                     locusOfInterest = locusOfInterest,
-                     config = config$variantSelectionCriteria)
+  correctedGenotypeData <- correctIntensities(
+    genotypeData = NULL,
+    locusOfInterest = locusOfInterest,
+    config = config$variantSelectionCriteria)
+
+  # We expect that the biggest variance is represented by copy number
+  # variations. We want te re-identify these copy number variations.
+  # To do this, we perform a PCA, projecting data on principal components,
+  # each of these represent orthoganol bits of the variation.
+  projectedGenotypeData <- pcaOverVariantsInLocus(correctedGenotypeData)
+
+
 }
 
 if (sys.nframe() == 0 && !interactive()) {

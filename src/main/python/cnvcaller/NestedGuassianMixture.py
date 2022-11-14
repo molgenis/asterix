@@ -20,16 +20,14 @@ root directory of this source tree. If not, see <https://www.gnu.org/licenses/>.
 
 # Standard imports.
 import numbers
-import os
 import sys
-import argparse
-import warnings
-import numpy as np
 
-from sklearn.mixture import GaussianMixture
-from sklearn.cluster import MeanShift
+import numpy as np
 from scipy.special import logsumexp
-from sklearn.mixture._gaussian_mixture import _compute_precision_cholesky, _estimate_log_gaussian_prob
+from sklearn.cluster import MeanShift
+from sklearn.mixture import GaussianMixture
+from sklearn.mixture._gaussian_mixture import _compute_precision_cholesky, _estimate_log_gaussian_prob, \
+    _estimate_gaussian_covariances_full
 
 # Metadata
 __program__ = "CNV-caller"
@@ -56,21 +54,33 @@ class ComplexFeatureDataset:
         self._feature_level = feature_level
         self._X = X
         self._complex_features = self._setup_complex_features()
-    def shape(self):
+        self.shape = self._shape()
+        print(self.shape)
+    def _shape(self):
         feature_labels = self.feature_labels()
         return (self._X.shape[0], ) + feature_labels.shape
     def feature_labels(self):
         return self._X.columns.get_level_values(self._feature_level).unique()
     def _setup_complex_features(self):
         feature_label = self.feature_labels()
-        return [ComplexFeature(label, feature_level=self._feature_level) for label in feature_label]
+        return [self._setup_complex_feature(label) for label in feature_label]
+    def _setup_complex_feature(self, label):
+        feature = ComplexFeature(label, feature_level=self._feature_level)
+        feature.missing(feature.X_(self._X).isna().any(axis=1))
+        return feature
     def featurize_over_components(self, labels, max_features_across_components):
         for complex_feature in self._complex_features:
             complex_feature.initialize(
                 complex_feature.X_(self._X), labels, max_features_across_components)
     def iter_nests(self):
         for complex_feature in self._complex_features:
-            yield complex_feature.X_(self._X)
+            yield complex_feature.X_(self._X), complex_feature
+    def featurization(self):
+        identifiers = [complex_feature.identifier for complex_feature in self._complex_features]
+        return pd.concat(
+            [complex_feature.featurization(complex_feature.X_(self._X), self._X.index)
+             for complex_feature in self._complex_features],
+            axis=1, keys=identifiers, names=["feature", "component", "inner"])
 
 
 class ComplexFeature:
@@ -78,12 +88,20 @@ class ComplexFeature:
         self.identifier = identifier
         self._feature_level = feature_level
         self._inner_features = list()
+        self._missing = None
+        self._inner_model = None
+        self._resp = None
     def initialize(self, X, sample_labels, subdivisions_max_per_component):
+        if self._missing is None:
+            self._missing = X.isna().any(axis=1)
+        X_non_missing = X[~self._missing]
+        sample_labels_non_missing = sample_labels[~self._missing]
         print(self.identifier)
+        resp_per_component_list = list()
         for label, subdivisions_max in subdivisions_max_per_component.items():
-            samples_pass = np.logical_and(sample_labels == label, X.notna().any(axis=1))
+            samples_pass = sample_labels_non_missing == label
             # filtered subdivision X
-            component_filtered_x = X[samples_pass]
+            component_filtered_x = X_non_missing[samples_pass]
             # theta
             theta = np.arctan(
                 component_filtered_x.iloc[:, 0] /
@@ -94,18 +112,22 @@ class ComplexFeature:
                 # Get the responsibilities per subdivision
                 resp_non_null = self._resp_init(theta.values.reshape(-1, 1), subdivisions_max)
                 # We need to update resp?
+            samples_null = (sample_labels_non_missing == label)
             resp = np.zeros((
-                X.notna().any(axis=1).sum(), # Number of samples with data for this complex feature
+                X_non_missing.shape[0], # Number of samples with data for this complex feature
                 resp_non_null.shape[1])) # Number of components in inner feature
-            samples_null = (sample_labels == label)[X.notna().any(axis=1)]
             resp[samples_null] = resp_non_null
-            internal_feature = InternalFeature(n_components=resp.shape[0], resp_init=resp)
-            internal_feature.fit(X[X.notna().any(axis=1)])
-            self._inner_features.append(internal_feature)
+            # array-like of shape (n_samples_not_null, n_components*n_features)
+            self._inner_features.append(tuple(range(resp_non_null.shape[1])))
+            resp_per_component_list.append(resp)
+        self._resp = np.concatenate(resp_per_component_list, axis=1)
+        self._inner_model = InternalFeature(n_components=self._resp.shape[1], resp_init=self._resp)
+        self._inner_model.fit(X_non_missing)
     def _resp_init(self, X, subdivisions_max, frequency_min=5):
-        ms = MeanShift(bin_seeding=True, bandwidth=0.2, min_bin_freq = frequency_min)
+        ms = MeanShift(bin_seeding=True, bandwidth=0.12, min_bin_freq = frequency_min)
         ms.fit(X = X)
         values, counts = np.unique(ms.labels_, return_counts=True)
+        print(values, counts)
         # Now, select those values with a count lower than
         # The 0 - subdivisions_max value should be good enough.
         # However, if there are values equal to that, both should be removed
@@ -115,11 +137,39 @@ class ComplexFeature:
             partitioned = np.partition(counts, partitioning_index)[partitioning_index]
             frequency_threshold = partitioned if np.count_nonzero(counts == partitioned) == 1 else partitioned + 1
         values_filtered = values[counts >= np.max([frequency_threshold, frequency_min])]
+        print(values_filtered)
         responsibilities = np.equal.outer(ms.labels_, values_filtered).astype(float)
         return responsibilities
     def X_(self, X_):
         return X_.xs(self.identifier, level=self._feature_level, axis=1)
-    def estimate_means(self, X_, resp):
+    def e_m_round(self, X_, outer):
+        X_non_missing = X_[~self._missing]
+        self.update(outer[~self._missing])
+        # means = self.estimate_means(X_non_missing)
+        # diffs = self.diffs(X_non_missing, means)
+        # covariances = _estimate_gaussian_covariances_full(
+        #     self._resp, nk_inner, means, diffs, reg_covar)
+        # precisions_cholesky = _compute_precision_cholesky(
+        #     covariances, "full"
+        # )
+        # log_prob = (
+        #         _estimate_log_gaussian_prob(X_, means, precisions_cholesky, "full"))
+        # log_prob
+    def resp(self):
+        return self._resp
+    def update(self, outer):
+        # Resp for each internal component should be multiplied with the corresponding
+        # Outer component, and the result should be normalised
+        outer_repeated_log = np.repeat(
+            np.log(outer[~self._missing]),
+            repeats=[len(inner_comps) for inner_comps in self._inner_features],
+            axis=0)
+        resp_total_log = outer_repeated_log + np.log(self._resp)
+        log_prob_norm = logsumexp(resp_total_log, axis=1)
+        with np.errstate(under="ignore"):
+            # ignore underflow
+            self._resp = np.exp(resp_total_log - log_prob_norm[:, np.newaxis])
+    def estimate_means_old(self, X_, resp):
         """
         Estimate means for each subfeature
         :param X_: intensities_matrix (n_samples, n_components)
@@ -130,21 +180,50 @@ class ComplexFeature:
         subdivision_means = list()
         # List of array-like. Shape (n_components, n_features)
         # Now loop through components
-        for (inner_component, outer_resp) in enumerate(zip(self._inner_features, resp)):
-            log_resp = inner_component._estimate_log_prob_resp(X_)
-            # Now, optimize centroids to fit responsibilities
-            # Calculate common resp
-            log_resp_sum = np.log(outer_resp) + log_resp
-            log_prob_norm = logsumexp(log_resp_sum, axis=1)
-            with np.errstate(under="ignore"):
-                # ignore underflow
-                resp_norm = np.exp(log_resp_sum - log_prob_norm[:, np.newaxis])
-            nk = resp_norm.sum(axis=0) + 10 * np.finfo(resp_norm.dtype).eps
-            component_means = np.dot(resp_norm.T, X_) / nk[:, np.newaxis]
+        resp_non_missing = resp[~self._missing].T
+        for inner_component, outer_resp in zip(self._inner_features, resp_non_missing):
+            log_resp = np.log(inner_component.resp)
+            # Resp for inner features. [0-1]
+            # Could have all 0s for a sample.
+            # We should multiply the inner features, and normalise over all components*inner features
+            resp_total = outer_resp[:,np.newaxis]
+            if log_resp.shape[1] > 1:
+                # Now, optimize centroids to fit responsibilities
+                # Calculate common resp
+                log_resp_sum = np.log(resp_total) + log_resp
+                log_prob_norm = logsumexp(log_resp_sum, axis=1)
+                with np.errstate(under="ignore"):
+                    # ignore underflow
+                    resp_total = np.exp(log_resp_sum - log_prob_norm[:, np.newaxis])
+                    resp_total[np.isnan(resp_total)] = 0
+            nk = (resp_total.sum(axis=0, keepdims=False)
+                  + 10 * np.finfo(resp_total.dtype).eps)
+            component_means = np.dot(resp_total.T, X_[~self._missing]) / nk[:, np.newaxis]
+            print(component_means)
             # array-like of shape (n_subdivisions, n_subspace)
-            subdivision_means.extend(list(component_means))
+            subdivision_means.append(component_means)
         # Now we have calculated means for this component
         return subdivision_means
+    def gaussian_parameters_featurized(self, X_):
+        # Estimate means for each cluster
+        means = self.estimate_means(X_)
+        # Array-like of shape (n_components, n_subspace)
+        # Estimate diffs for each cluster
+        diffs = self.diffs(X_, means)
+        # Array-like of shape (n_samples, n_components, n_subspace)
+        means_list = (
+            [means[np.array(inner_comps)+outer_comp,:]
+             for outer_comp, inner_comps in enumerate(self._inner_features)])
+        # Lists (features, components) of arrays (n_subspace)
+        diffs_list = (
+            [diffs[:,outer_comp+inner_comps,:]
+             for outer_comp, inner_comps in enumerate(self._inner_features)])
+        # Lists (features, components) of arrays (n_samples, n_subspace)
+    def estimate_means(self, X_):
+        nk = (self._resp.sum(axis=0, keepdims=False)
+              + 10 * np.finfo(self._resp.dtype).eps)
+        means = np.dot(self._resp.T, X_[~self._missing]) / nk[:, np.newaxis]
+        return means
     def diffs(self, X_, means_over_inner_features):
         """
         Calculate the difference between X_ and means.
@@ -154,15 +233,19 @@ class ComplexFeature:
         :return: difference between samples and means
         """
         # For the means
-        number_of_inner_features = len(means_over_inner_features)
-        number_of_components = means_over_inner_features[0].shape[0]
-        diffs_over_inner_features = list()
-        for means in means_over_inner_features:
-            # Means, array-like of shape (n_components, n_subspace)
-            # X_, array-like of shape (n_samples, n_subspace)
-            diffs_over_inner_features.append(X_[np.newaxis,...] - means[:,np.newaxis,:])
+        diffs = X_[~self._missing][np.newaxis,...] - means
             # array-like of shape (n_components, n_samples, n_subspace)
-        return diffs_over_inner_features
+        return diffs
+    def featurization(self, X, index):
+        return pd.concat(
+            [pd.DataFrame(
+                np.exp(inner_component._estimate_weighted_log_prob(X[~self._missing])),
+                index=index[~self._missing])
+             for inner_component in self._inner_features],
+            names=["component", "inner"], axis=1,
+            keys=range(len(self._inner_features)))
+    def missing(self, missing):
+        self._missing=missing
 
 
 class InternalFeature(GaussianMixture):
@@ -298,14 +381,56 @@ class InternalFeature(GaussianMixture):
         _, log_resp = self._e_step(X)
         return log_resp.argmax(axis=1)
 
+
 class NestedGaussianMixture(GaussianMixture):
-    def _check_parameters(self, X):
-        """Check initial parameters of the derived class.
-        Parameters
-        ----------
-        X : array-like of shape  (n_samples, n_features)
+    def __init__(
+            self,
+            n_components=1,
+            *,
+            covariance_type="full",
+            tol=1e-3,
+            reg_covar=1e-6,
+            max_iter=0,
+            n_init=1,
+            init_params="kmeans",
+            resp_init=None,
+            weights_init=None,
+            means_init=None,
+            precisions_init=None,
+            random_state=None,
+            warm_start=False,
+            verbose=0,
+            verbose_interval=10
+    ):
+        super().__init__(
+            n_components=n_components,
+            tol=tol,
+            reg_covar=reg_covar,
+            max_iter=max_iter,
+            n_init=n_init,
+            init_params=init_params,
+            covariance_type=covariance_type,
+            weights_init=weights_init,
+            means_init=means_init,
+            precisions_init=precisions_init,
+            random_state=random_state,
+            warm_start=warm_start,
+            verbose=verbose,
+            verbose_interval=verbose_interval,
+        )
+        self.resp_init=resp_init
+    def _initialize_parameters(self, X, random_state):
         """
+        Initializes parameters for
+        :param X:
+        """
+        self._initialize(X, self.resp_init)
+    def _validate_data(
+            self,
+            X="no_validation",
+            *args, **kwargs):
         pass
+        # super()._validate_data(X="no_validation", *args, **kwargs)
     def _initialize(self, X, resp):
         """Initialization of the Gaussian mixture parameters.
         Parameters
@@ -357,20 +482,17 @@ class NestedGaussianMixture(GaussianMixture):
         if covariance_type != "full":
             raise NotImplementedError()
         nk = resp.sum(axis=0) + 10 * np.finfo(resp.dtype).eps
-
-        means_list_nested = [
-            complex_feature.estimate_means(X, resp) for complex_feature in X.iter_nests()]
-        # List containing array-like of shape (n_components, n_inner_features)
-        diffs_list_nested = [
-            complex_feature.diffs(X, feature_means) for (complex_feature, feature_means) in zip(
-                X.iter_nests(), means_list_nested)]
+        means_list = list()
+        diffs_list = list()
+        for X_, complex_feature in X.iter_nests():
+            complex_feature.e_m_round(X_)
+            means, diffs = complex_feature.gaussian_parameters_featurized(X_)
+            means_list.extend(means)
+            diffs_list.extend(diffs)
         # List containing array-like of shape (n_samples, n_components, n_inner_features)
-
-        means = np.concatenate([means for means_list in means_list_nested for means in means_list], axis=1)
-        diffs = np.concatenate([diffs for diffs_list in diffs_list_nested for diffs in diffs_list], axis=2)
-
+        means = np.concatenate([means for means in means_list], axis=1)
+        diffs = np.concatenate([diffs for diffs in diffs_list], axis=2)
         # array-like of shape (n_components, n_features_expanded)
-
         covariances = self._estimate_gaussian_covariances_full(resp, nk, means, diffs, reg_covar)
         return nk, means, covariances
     def _estimate_gaussian_covariances_full(self, resp, nk, means, diffs_over_components, reg_covar):
@@ -395,11 +517,92 @@ class NestedGaussianMixture(GaussianMixture):
             covariances[k] = np.dot(resp[:, k] * diffs.T, diffs) / nk[k]
             covariances[k].flat[:: n_features + 1] += reg_covar
         return covariances
-def _get_max_expected_number_of_subdivisions(dosage_mutation, ref=2):
-    dosage_total = dosage_mutation + ref
-    expected_alleles = np.arange(dosage_total + 1)
-    return (np.add.outer(expected_alleles, expected_alleles) == dosage_total).sum()
+    def fit_predict(self, X, y=None):
+        """Estimate model parameters using X and predict the labels for X.
 
+        The method fits the model n_init times and sets the parameters with
+        which the model has the largest likelihood or lower bound. Within each
+        trial, the method iterates between E-step and M-step for `max_iter`
+        times until the change of likelihood or lower bound is less than
+        `tol`, otherwise, a :class:`~sklearn.exceptions.ConvergenceWarning` is
+        raised. After fitting, it predicts the most probable label for the
+        input data points.
+
+        .. versionadded:: 0.20
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
+
+        y : Ignored
+            Not used, present for API consistency by convention.
+
+        Returns
+        -------
+        labels : array, shape (n_samples,)
+            Component labels.
+        """
+        if X.shape[0] < self.n_components:
+            raise ValueError(
+                "Expected n_samples >= n_components "
+                f"but got n_components = {self.n_components}, "
+                f"n_samples = {X.shape[0]}"
+            )
+        self._check_initial_parameters(X)
+        # if we enable warm_start, we will have a unique initialisation
+        do_init = not (self.warm_start and hasattr(self, "converged_"))
+        n_init = self.n_init if do_init else 1
+        max_lower_bound = -np.inf
+        self.converged_ = False
+        random_state = check_random_state(self.random_state)
+        n_samples, _ = X.shape
+        for init in range(n_init):
+            self._print_verbose_msg_init_beg(init)
+            if do_init:
+                self._initialize_parameters(X, random_state)
+            lower_bound = -np.inf if do_init else self.lower_bound_
+            for n_iter in range(1, self.max_iter + 1):
+                prev_lower_bound = lower_bound
+                log_prob_norm, log_resp = self._e_step(X)
+                self._m_step(X, log_resp)
+                lower_bound = self._compute_lower_bound(log_resp, log_prob_norm)
+                change = lower_bound - prev_lower_bound
+                self._print_verbose_msg_iter_end(n_iter, change)
+                if abs(change) < self.tol:
+                    self.converged_ = True
+                    break
+            self._print_verbose_msg_init_end(lower_bound)
+            if lower_bound > max_lower_bound or max_lower_bound == -np.inf:
+                max_lower_bound = lower_bound
+                best_params = self._get_parameters()
+                best_n_iter = n_iter
+        self._set_parameters(best_params)
+        self.n_iter_ = best_n_iter
+        self.lower_bound_ = max_lower_bound
+        # Always do a final e-step to guarantee that the labels returned by
+        # fit_predict(X) are always consistent with fit(X).predict(X)
+        # for any value of max_iter and tol (and any random_state).
+        _, log_resp = self._e_step(X)
+        return log_resp.argmax(axis=1)
+
+
+
+def assignments_to_resp(assignments, labels=None):
+    """
+    Converts assignments (per sample assignment of label)
+    to resp (per sample float assignment per component)
+
+    :param assignments: 1D array of assignments to components
+    :param labels: labels to create a column for
+
+    :return: array-like of shape (n_samples, n_components)
+    """
+    if labels is None:
+        labels = np.unique(assignments)
+    resp = np.equal.outer(assignments, labels).astype(float)
+    return resp
 
 # Main
 def main(argv=None):
