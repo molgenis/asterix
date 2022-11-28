@@ -21,6 +21,10 @@ public class PgxHaplotype {
         return snps.containsKey(snp.getId());
     }
 
+    public void removeSnp(Snp snp) {
+        snps.remove(snp.getId());
+    }
+
     public Map<String, Snp> getSnps() {
         return snps;
     }

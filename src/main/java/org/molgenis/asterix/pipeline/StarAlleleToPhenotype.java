@@ -160,8 +160,6 @@ public class StarAlleleToPhenotype {
         //write resulting phenotypes to matrix/matrices
         writeSampleMatrix(haplotypeToStarAllele, samples);
 
-
-        //TODO not sure what this was for anymore
         for (PgxGene pgxGene : haplotypeToStarAllele.getGenes().values()) {
 
             File predictedPhenotypeOutputFile = new File(PREDICTED_PHENOTYPES_OUTPUT_DIR + pgxGene.getName() + "_predicted_phenotypes.txt");

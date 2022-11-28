@@ -7,7 +7,7 @@ package org.molgenis.asterix.config;
  */
 public class ConfigConstants {
 
-    //output dir staralleles of every individual
+    //output dir star alleles of every individual
     public static final String STAR_ALLELE_OUTPUT_DIR = "STAR_ALLELE_OUTPUT_DIR";
     protected static final String OPTION_STAR_ALLELE_OUTPUT_DIR = "star_out";
     protected static final String DEFAULT_STAR_ALLELE_OUTPUT_DIR = "star_alleles/";

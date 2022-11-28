@@ -38,6 +38,9 @@ public class SnpToHaploTableReader {
                     addSnpToHaplotype(pgxGene, line);
                     line = br.readLine();
                 }
+
+                // Add wild type at the end because the reference is only known when all snp are processed
+                pgxGene.getPgxHaplotypes().put(pgxGene.getWildType().getName(), pgxGene.getWildType());
                 genes.put(pgxGene.getName(), pgxGene);
             }
         }
@@ -52,19 +55,22 @@ public class SnpToHaploTableReader {
         String haplotypeName = splitLine[0];
 
         Snp snp = new Snp();
-        snp.setId(splitLine[2]);
         snp.setChr(Integer.parseInt(splitLine[3]));
         snp.setPos(Integer.parseInt(splitLine[4]));
         snp.setReferenceAllele(splitLine[6]);
         snp.setType(splitLine[8]);
 
+        String id = splitLine[2];
+        if (id.equals("-")) snp.setId(snp.getChr() + ":" + snp.getPos() + ":" + snp.getReferenceAllele());
+        else snp.setId(id);
+
+
         if (snp.getPos() > gene.getEndPos()) gene.setEndPos(snp.getPos());
         if (snp.getPos() < gene.getStartPos()) gene.setStartPos(snp.getPos());
 
-        if (splitLine[7].equals("-")) snp.setVariantAllele(splitLine[6]);
+        if (splitLine[7].equals("-")) snp.setVariantAllele(splitLine[6]); // TODO what about indels
         else snp.setVariantAllele(splitLine[7]);
 
-        // TODO: Is a wild type haplotype really necessary? wild type is always the ref allele
         if (!gene.getWildType().hasSnp(snp)) {
             Snp wildTypeSnp = snp.copySnp(snp);
             wildTypeSnp.setVariantAllele(wildTypeSnp.getReferenceAllele());

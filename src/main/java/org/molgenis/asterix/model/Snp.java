@@ -11,7 +11,10 @@ public class Snp {
     private String variantAllele;
     private String type;
     private Double rSquared;
+    private Double probability;
     private String minorAllele;
+    private Double maf;
+    private boolean isAvailable;
 
     public int getChr() {
         return chr;
@@ -77,6 +80,30 @@ public class Snp {
         this.minorAllele = minorAllele;
     }
 
+    public Double getMaf() {
+        return maf;
+    }
+
+    public void setMaf(Double maf) {
+        this.maf = maf;
+    }
+
+    public boolean isAvailable() {
+        return isAvailable;
+    }
+
+    public void setAvailable(boolean available) {
+        isAvailable = available;
+    }
+
+    public Double getProbability() {
+        return probability;
+    }
+
+    public void setProbability(Double probability) {
+        this.probability = probability;
+    }
+
     public Snp copySnp(Snp snpToCopy) {
         Snp snp = new Snp();
         snp.setVariantAllele(snpToCopy.getVariantAllele());
@@ -86,6 +113,9 @@ public class Snp {
         snp.setId(snpToCopy.getId());
         snp.setMinorAllele(snpToCopy.getMinorAllele());
         snp.setType(snpToCopy.getType());
+        snp.setMaf(snpToCopy.getMaf());
+        snp.setrSquared(snpToCopy.getrSquared());
+        snp.setAvailable(snpToCopy.isAvailable());
 
         return snp;
     }
@@ -128,4 +158,5 @@ public class Snp {
     public int hashCode() {
         return Objects.hash(id, variantAllele);
     }
+
 }

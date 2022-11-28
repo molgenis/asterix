@@ -25,10 +25,9 @@ public class HaplotypeToStarAllele {
     private static String SNP_HAPLO_TABLE_DIR;
     private static HaplotypeReader HAPLOTYPE_READER;
 
-    // Gene as values, gene identifiers as keys
+    // Gene identifiers as keys
     private SortedMap<String, PgxGene> genes;
-
-    // Samples as values, sample identifiers as keys
+    // Sample identifiers as keys
     private Map<String, PgxSample> samples;
 
     public HaplotypeToStarAllele() throws IOException {
@@ -66,11 +65,17 @@ public class HaplotypeToStarAllele {
                     }
 
                     if (snpsOnHaplotype0.equals(snpsOnPgxHaploType)) {
+                        if (starAllele0 != null) {
+                            System.out.println("Duplicate star allele: " + starAllele0 + " " + pgxHaplotype.getName());
+                        }
                         starAllele0 = pgxHaplotype.getName();
                         sample.getGenes().get(pgxGene.getName()).setAllele0(starAllele0);
                     }
 
                     if (snpsOnHaplotype1.equals(snpsOnPgxHaploType)) {
+                        if (starAllele1 != null) {
+                            System.out.println("Duplicate star allele: " + starAllele1 + " " + pgxHaplotype.getName());
+                        }
                         starAllele1 = pgxHaplotype.getName();
                         sample.getGenes().get(pgxGene.getName()).setAllele1(starAllele1);
                     }
@@ -81,8 +86,12 @@ public class HaplotypeToStarAllele {
                 }
 
                 //TODO: Here we allow a mismatch and fallback to the wild type
-                if (starAllele0 == null) sample.getGenes().get(pgxGene.getName()).setAllele0(pgxGene.getWildType().getName());
-                if (starAllele1 == null) sample.getGenes().get(pgxGene.getName()).setAllele1(pgxGene.getWildType().getName());
+//                if (starAllele0 == null) sample.getGenes().get(pgxGene.getName()).setAllele0(pgxGene.getWildType().getName());
+//                if (starAllele1 == null) sample.getGenes().get(pgxGene.getName()).setAllele1(pgxGene.getWildType().getName());
+
+                // For now don't allow fallback and set allele to NA
+                if (starAllele0 == null) sample.getGenes().get(pgxGene.getName()).setAllele0("NA");
+                if (starAllele1 == null) sample.getGenes().get(pgxGene.getName()).setAllele1("NA");
 
             }
 
@@ -104,7 +113,8 @@ public class HaplotypeToStarAllele {
             BufferedWriter bw = new BufferedWriter(fileWriter);
 
             for (PgxSample sample : samples.values()) {
-                String line = sample.getId() + "\t" + sample.getGenes().get(pgxGene.getName()).getAllele0() + "\t" + sample.getGenes().get(pgxGene.getName()).getAllele1() + "\n";
+                String line = sample.getId() + "\t" + sample.getGenes().get(pgxGene.getName()).getAllele0() + "\t" +
+                        sample.getGenes().get(pgxGene.getName()).getAllele1() + "\n";
                 bw.write(line);
             }
 

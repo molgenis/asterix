@@ -1,6 +1,5 @@
 package org.molgenis.asterix.model;
 
-import javax.xml.crypto.dsig.keyinfo.PGPData;
 import java.util.*;
 
 public class PgxGene {
@@ -117,5 +116,16 @@ public class PgxGene {
                 ", allele1='" + allele1 + '\'' +
                 ", predictedPhenotype='" + predictedPhenotype + '\'' +
                 '}';
+    }
+
+    public void updateSnpInfoOnHaplotypes(Snp snp) {
+        for (PgxHaplotype haplotype : pgxHaplotypes.values()) {
+            if (haplotype.getSnps().containsKey(snp.getId())) {
+                Snp haplotypeSnp = haplotype.getSnps().get(snp.getId());
+                haplotypeSnp.setAvailable(snp.isAvailable());
+                haplotypeSnp.setMaf(snp.getMaf());
+                haplotypeSnp.setrSquared(snp.getrSquared());
+            }
+        }
     }
 }

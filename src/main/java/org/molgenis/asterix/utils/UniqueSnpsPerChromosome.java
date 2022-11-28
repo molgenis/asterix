@@ -44,7 +44,7 @@ public class UniqueSnpsPerChromosome {
                         continue;
                     }
 
-                    Double rSquared = Double.parseDouble(splitLine[7]);
+                    double rSquared = Double.parseDouble(splitLine[7]);
 
                     if (rSquared > 0.9) snpsForChromosome.add(snpPos);
 
