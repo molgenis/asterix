@@ -1,0 +1,3 @@
+numpy==1.21.2
+pyranges
+git+https://github.com/Illumina/BeadArrayFiles.git@1.3.3#egg=illuminabeadarrayfiles

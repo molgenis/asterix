@@ -1,0 +1,15 @@
+base:
+  value: "R"
+batch correction:
+  pca_scaling: true
+  pca_n_components: 100
+  pca_over_samples: false
+  regression_fit_intercept: true
+naive clustering:
+  - [22, 42525043, 42525045]
+variant selection:
+  "/groups/umcg-wijmenga/tmp01/projects/pgx-pipeline/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/variants_curated_beta.bed"
+dimensionality reduction:
+  "/groups/umcg-wijmenga/tmp01/projects/pgx-pipeline/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/unique_positions_curated_gamma.bed"
+clustering ranges:
+  "/groups/umcg-wijmenga/tmp01/projects/pgx-pipeline/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/cyp2d6_extended.bed"
