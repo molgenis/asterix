@@ -23,7 +23,12 @@ public class AppStarter {
 
     /*
     example args:
-    java -jar asterix.jar -star_out C:\\molgenis\\asterix_data\\star_alleles\\ -snp_haplo_table_dir C:\\molgenis\\asterix_data\\snp_to_haplo\\ -haplo_type_dir C:\\molgenis\\asterix_data\\ll_phased_active\\ -haplo_pheno_table_dir C:\\molgenis\\asterix_data\\haplo_to_pheno\\ -pheno_out_dir C:\\molgenis\\asterix_data\\predicted_phenotypes\\ -sample_matrix_out C:\\molgenis\\asterix_data\\sample_matrix.csv
+    java -jar asterix.jar -star_out C:\\molgenis\\asterix_data\\star_alleles\\
+        -snp_haplo_table_dir C:\\molgenis\\asterix_data\\snp_to_haplo\\
+        -haplo_type_dir C:\\molgenis\\asterix_data\\ll_phased_active\\
+        -haplo_pheno_table_dir C:\\molgenis\\asterix_data\\haplo_to_pheno\\
+        -pheno_out_dir C:\\molgenis\\asterix_data\\predicted_phenotypes\\
+        -sample_matrix_out C:\\molgenis\\asterix_data\\sample_matrix.csv
      */
 
     /**

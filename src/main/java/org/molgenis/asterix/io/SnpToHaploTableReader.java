@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import static java.lang.System.exit;
+
 public class SnpToHaploTableReader {
 
     public SnpToHaploTableReader(String snpToHaplotypeTableDir) {
@@ -26,13 +28,20 @@ public class SnpToHaploTableReader {
         for (File snpHaploTable : snpHaploTables) {
             try (BufferedReader br = new BufferedReader(new FileReader(snpHaploTable))) {
                 br.readLine();
+
                 String line = br.readLine();
 
                 String[] splitLine = line.split("\t");
                 String geneName = splitLine[1];
 
                 PgxGene pgxGene = new PgxGene(geneName);
-                pgxGene.setChr(Integer.parseInt(splitLine[3]));
+                String chrString = splitLine[3];
+                String[] chrList = chrString.split("\\.");
+                if (chrList.length > 1) {
+                    String chr = chrList[0].split("0{4,5}")[1];
+                    pgxGene.setChr(Integer.parseInt(chr));
+                }
+                else pgxGene.setChr(Integer.parseInt(chrString));
 
                 while (line != null) {
                     addSnpToHaplotype(pgxGene, line);
@@ -49,13 +58,14 @@ public class SnpToHaploTableReader {
     private void addSnpToHaplotype(PgxGene gene, String line) {
         String[] splitLine = line.split("\t");
         if (splitLine.length != 9) {
+            System.out.println(line);
             throw new IllegalArgumentException("Invalid number of lines in translation table");
         }
 
         String haplotypeName = splitLine[0];
 
         Snp snp = new Snp();
-        snp.setChr(Integer.parseInt(splitLine[3]));
+        snp.setChr(gene.getChr());
         snp.setPos(Integer.parseInt(splitLine[4]));
         snp.setReferenceAllele(splitLine[6]);
         snp.setType(splitLine[8]);

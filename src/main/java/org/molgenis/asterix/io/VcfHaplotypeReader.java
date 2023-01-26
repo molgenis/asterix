@@ -204,6 +204,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         ConfigProvider configProvider = ConfigProvider.getInstance();
         //load dirs
         STAR_ALLELE_OUTPUT_DIR = configProvider.getConfigParam(ConfigConstants.STAR_ALLELE_OUTPUT_DIR);
+        STAR_ALLELE_OUTPUT_DIR = "/groups/umcg-gdio/tmp01/projects/2021001/pgx-pipeline/analyses/impute_pgx_genes/out/20221103/postimpute/";
     }
 
 }
