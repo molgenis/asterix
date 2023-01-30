@@ -1,7 +1,6 @@
 package org.molgenis.asterix.config;
 
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
@@ -11,13 +10,10 @@ import org.apache.commons.cli.*;
 /**
  * @author OelenR
  *
- * class to store the configuration
+ * Class to store the configuration
+ *     This class implements the singleton pattern
  */
 public class ConfigProvider {
-
-    /*
-    this class implements the singleton pattern
-     */
 
     //parser for CLI arguments
     private CommandLineParser parser = null;
@@ -33,7 +29,6 @@ public class ConfigProvider {
     private Options options = null;
     //whether the user requested help
     private boolean requestedHelp = false;
-
 
     //self reference
     private static ConfigProvider SELF = new ConfigProvider();
@@ -158,7 +153,7 @@ public class ConfigProvider {
         if (this.storedConfig.contains(paramName)) {
             return true;
         }
-        else{
+        else {
             return false;
         }
     }
@@ -176,7 +171,7 @@ public class ConfigProvider {
      * print the help/manual
      */
     private void printHelp(){
-        this.helpFormatter.printHelp("asterix", this.options);
+        this.helpFormatter.printHelp("org/molgenis/asterix", this.options);
     }
 
     /*
@@ -214,7 +209,7 @@ public class ConfigProvider {
     }
 
     /**
-     * get wether the user requested the help
+     * get whether the user requested the help
      * @return whether the user requested the help
      */
     public boolean isRequestedHelp(){
