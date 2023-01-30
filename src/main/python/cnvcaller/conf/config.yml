@@ -9,8 +9,6 @@ naive clustering:
   - [22, 42525043, 42525045]
 variant selection:
   "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/variants_curated_delta.bed"
-dimensionality reduction:
-  "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/unique_positions_curated_gamma.bed"
 clustering ranges:
   "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/cyp2d6_extended.bed"
 cnv calling:
