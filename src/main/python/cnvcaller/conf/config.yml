@@ -8,8 +8,9 @@ batch correction:
 naive clustering:
   - [22, 42525043, 42525045]
 variant selection:
-  "/groups/umcg-wijmenga/tmp01/projects/pgx-pipeline/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/variants_curated_beta.bed"
-dimensionality reduction:
-  "/groups/umcg-wijmenga/tmp01/projects/pgx-pipeline/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/unique_positions_curated_gamma.bed"
+  "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/variants_curated_delta.bed"
 clustering ranges:
-  "/groups/umcg-wijmenga/tmp01/projects/pgx-pipeline/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/cyp2d6_extended.bed"
+  "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/cyp2d6_extended.bed"
+cnv calling:
+  clustering_max_iter: 1000
+  genotype_labels: [-2, -1, 0, 1]

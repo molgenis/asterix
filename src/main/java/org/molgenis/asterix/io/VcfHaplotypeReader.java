@@ -7,6 +7,7 @@ import org.molgenis.asterix.model.PgxGene;
 import org.molgenis.asterix.model.PgxHaplotype;
 import org.molgenis.asterix.model.PgxSample;
 import org.molgenis.asterix.model.Snp;
+import org.molgenis.genotype.Alleles;
 import org.molgenis.genotype.Sample;
 import org.molgenis.genotype.variant.GeneticVariant;
 import org.molgenis.genotype.vcf.VcfGenotypeData;
@@ -60,13 +61,12 @@ public class VcfHaplotypeReader implements HaplotypeReader {
                     for (Snp pgxSnp : pgxSnpsInGene) {
                         i++;
                         System.out.print("Processing PGx gene " + pgxGene.getName() + " SNP " + i + "/" + pgxSnpsInGene.size() + "\r");
-                        GeneticVariant snp = genotypeData.getSnpVariantByPos(Integer.toString(pgxSnp.getChr()), pgxSnp.getPos());
-                        if (snp != null) {
-                            presentCount++;
-                            parseSnp(snp, pgxSnp, pgxGene);
-                        } else {
+                        GeneticVariant genotypesVariant = matchGeneticVariant(genotypeData, pgxSnp);
+                        presentCount++;
+                        if (genotypesVariant == null) {
                             pgxSnp.setAvailable(false);
-//                            removePgxSnpFromGene(pgxGene, pgxSnp);
+                        } else {
+                            parseSnp(genotypesVariant, pgxSnp, pgxGene);
                         }
                     }
                     System.out.println(presentCount + "/" + pgxGene.getWildType().getSnps().values().size() + " SNPs present");
@@ -75,6 +75,22 @@ public class VcfHaplotypeReader implements HaplotypeReader {
             }
 
         }
+    }
+
+    private GeneticVariant matchGeneticVariant(VcfGenotypeData genotypeData, Snp pgxSnp) {
+        GeneticVariant matchedVariant = null;
+        Alleles pgxSnpAlleles = Alleles.createBasedOnString(pgxSnp.getReferenceAllele(), pgxSnp.getVariantAllele());
+        Iterable<GeneticVariant> positionalMatches = genotypeData.getVariantsByPos(Integer.toString(pgxSnp.getChr()), pgxSnp.getPos());
+        for (GeneticVariant candidateVariant:positionalMatches) {
+            if (candidateVariant.getVariantAlleles().sameAlleles(pgxSnpAlleles)) {
+                if (matchedVariant != null) {
+                    System.out.println("pgxSnp = " + pgxSnp);
+                    throw new RuntimeException("Multiple SNPs match PGx SNP");
+                }
+                matchedVariant = candidateVariant;
+            }
+        }
+        return matchedVariant;
     }
 
     @Override
@@ -104,8 +120,11 @@ public class VcfHaplotypeReader implements HaplotypeReader {
 
     private void parseSnp(GeneticVariant variant, Snp pgxSnp, PgxGene pgxGene) {
 
-        pgxSnp.setrSquared(Double.parseDouble(variant.getAnnotationValues().get("R2").toString()));
-        pgxSnp.setMaf(Double.parseDouble(variant.getAnnotationValues().get("MAF").toString()));
+        pgxSnp.setrSquared((Double) variant.getAnnotationValues().get("R2"));
+        pgxSnp.setMaf((Double) variant.getAnnotationValues().get("MAF"));
+        // TODO: add additional info fields to output table
+        //pgxSnp.setCalculatedMaf(variant.getMinorAlleleFrequency());
+        pgxSnp.setHwe(variant.getHwePvalue());
 
         pgxSnp.setAvailable(pgxSnp.getrSquared() > R_SQUARED_CUT_OFF);
         pgxGene.updateSnpInfoOnHaplotypes(pgxSnp);
@@ -193,6 +212,14 @@ public class VcfHaplotypeReader implements HaplotypeReader {
                 bw.write(pgxHaplotype.getName() + "\t" + haplotypeSnp.getId() + "\t" + haplotypeSnp.getPos() + "\t");
                 bw.write(haplotypeSnp.getReferenceAllele() + "\t" + haplotypeSnp.getVariantAllele() + "\t");
                 bw.write(isAvailable + "\t" + haplotypeSnp.getrSquared() + "\t" + haplotypeSnp.getMaf() + "\n");
+                // Write:
+                // - availability
+                // - reported MAF
+                // - calculated MAF
+                // - MAF from reference
+                // - calculated HWE
+                // - R2
+                //
             }
         }
 

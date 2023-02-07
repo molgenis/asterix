@@ -15,6 +15,7 @@ public class Snp {
     private String minorAllele;
     private Double maf;
     private boolean isAvailable;
+    private double hwePvalue;
 
     public int getChr() {
         return chr;
@@ -159,4 +160,7 @@ public class Snp {
         return Objects.hash(id, variantAllele);
     }
 
+    public void setHwe(double hwePvalue) {
+        this.hwePvalue = hwePvalue;
+    }
 }
