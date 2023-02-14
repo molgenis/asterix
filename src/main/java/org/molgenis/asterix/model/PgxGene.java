@@ -5,6 +5,7 @@ import java.util.*;
 public class PgxGene {
 
     private String name;
+    private Map<String, Snp> variants = new HashMap<>();
     private SortedMap<String, PgxHaplotype> pgxHaplotypes = new TreeMap<>();
     private PgxHaplotype wildType;
     private int chr;
@@ -19,7 +20,7 @@ public class PgxGene {
 
     public PgxGene(String name) {
         this.name = name;
-        this.wildType = new PgxHaplotype(name + "*1");
+        this.wildType = new PgxHaplotype(this, name + "*1");
     }
 
     public void getDeterminableAlleles() {
@@ -118,14 +119,45 @@ public class PgxGene {
                 '}';
     }
 
-    public void updateSnpInfoOnHaplotypes(Snp snp) {
-        for (PgxHaplotype haplotype : pgxHaplotypes.values()) {
-            if (haplotype.getSnps().containsKey(snp.getId())) {
-                Snp haplotypeSnp = haplotype.getSnps().get(snp.getId());
-                haplotypeSnp.setAvailable(snp.isAvailable());
-                haplotypeSnp.setMaf(snp.getMaf());
-                haplotypeSnp.setrSquared(snp.getrSquared());
-            }
+    public void updateSnpInfo(Snp snp) {
+        if (this.getVariants().containsKey(snp.getId())) {
+            Snp haplotypeSnp = this.variants.get(snp.getId());
+            haplotypeSnp.setAvailable(snp.isAvailable());
+            haplotypeSnp.setMaf(snp.getMaf());
+            haplotypeSnp.setrSquared(snp.getrSquared());
+            haplotypeSnp.setAnnotations(snp.getAnnotations());
+            haplotypeSnp.setHwe(snp.getHwe());
+        }
+    }
+
+    public Map<String, Snp> getVariants() {
+        return variants;
+    }
+
+    public List<String> getAnnotationFields() {
+        Set<String> annotationFields = new HashSet<>();
+
+        for (Snp variant : this.variants.values()) {
+            annotationFields.addAll(variant.getAnnotations().keySet());
+        }
+        return new ArrayList<>(annotationFields);
+    }
+
+    public boolean hasVariant(Snp snp) {
+        return variants.containsKey(snp.getId());
+    }
+
+    public void addVariant(Snp snp) {
+        variants.put(snp.getId(), snp);
+    }
+
+    public void removeVariant(Snp pgxSnp) {
+        this.variants.remove(pgxSnp.getId());
+        // Remove SNP on all haplotypes and remove haplotype when empty
+        for (Iterator<Map.Entry<String, PgxHaplotype>> it = pgxHaplotypes.entrySet().iterator(); it.hasNext(); ) {
+            PgxHaplotype haplotype = it.next().getValue();
+            haplotype.removeVariantAllele(pgxSnp);
+            if (haplotype.getSnps().size() == 0) it.remove();
         }
     }
 }
