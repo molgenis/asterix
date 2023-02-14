@@ -9,7 +9,9 @@ import org.molgenis.asterix.model.PgxSample;
 import org.molgenis.asterix.model.Snp;
 import org.molgenis.genotype.Alleles;
 import org.molgenis.genotype.Sample;
+import org.molgenis.genotype.annotation.Annotation;
 import org.molgenis.genotype.variant.GeneticVariant;
+import org.molgenis.genotype.variant.GeneticVariantMeta;
 import org.molgenis.genotype.vcf.VcfGenotypeData;
 
 import java.io.BufferedWriter;
@@ -17,6 +19,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Implementation of HaplotypeReader for phased VCF files.
@@ -51,11 +55,12 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         for (File phasedVcfFile : phasedVcfFiles) {
             System.out.println("Reading genotype file " + phasedVcfFile.getName());
             VcfGenotypeData genotypeData = new VcfGenotypeData(phasedVcfFile, 100, 0.0);
+            Map<String, Annotation> variantAnnotationsMap = genotypeData.getVariantAnnotationsMap();
             processSampleIds(genotypeData);
 
             for (PgxGene pgxGene : genes) {
                 if (hasVariantsInRange(pgxGene, genotypeData)) {
-                    List<Snp> pgxSnpsInGene = new ArrayList<>(pgxGene.getWildType().getSnps().values());
+                    List<Snp> pgxSnpsInGene = new ArrayList<>(pgxGene.getVariants().values());
                     int presentCount = 0;
                     int i = 0;
                     for (Snp pgxSnp : pgxSnpsInGene) {
@@ -66,10 +71,10 @@ public class VcfHaplotypeReader implements HaplotypeReader {
                         if (genotypesVariant == null) {
                             pgxSnp.setAvailable(false);
                         } else {
-                            parseSnp(genotypesVariant, pgxSnp, pgxGene);
+                            parseSnp(genotypesVariant, variantAnnotationsMap, pgxSnp, pgxGene);
                         }
                     }
-                    System.out.println(presentCount + "/" + pgxGene.getWildType().getSnps().values().size() + " SNPs present");
+                    System.out.println(presentCount + "/" + pgxGene.getVariants().values().size() + " SNPs present");
                 }
                 writeOutputFile(pgxGene);
             }
@@ -118,16 +123,29 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         }
     }
 
-    private void parseSnp(GeneticVariant variant, Snp pgxSnp, PgxGene pgxGene) {
+    private void parseSnp(GeneticVariant variant, Map<String, Annotation> variantAnnotationsMap, Snp pgxSnp, PgxGene pgxGene) {
+        Map<String, String> mappedAnnotationValues = new HashMap<>();
+        Map<String, ?> annotationValues = variant.getAnnotationValues();
+        pgxSnp.setrSquared(((Number) annotationValues.get("R2")).doubleValue());
 
-        pgxSnp.setrSquared((Double) variant.getAnnotationValues().get("R2"));
-        pgxSnp.setMaf((Double) variant.getAnnotationValues().get("MAF"));
-        // TODO: add additional info fields to output table
-        //pgxSnp.setCalculatedMaf(variant.getMinorAlleleFrequency());
+        for (String annotationId : annotationValues.keySet()) {
+            if (variantAnnotationsMap.get(annotationId) != null) {
+                if (variantAnnotationsMap.get(annotationId).isList()) {
+                    List<?> o = (List<?>) annotationValues.get(annotationId);
+                    Object o1 = o.get(0);
+                    mappedAnnotationValues.put(annotationId, String.valueOf(o1));
+                } else {
+                    mappedAnnotationValues.put(annotationId, String.valueOf(annotationValues.get(annotationId)));
+                }
+            }
+        }
+
+        pgxSnp.setAnnotations(mappedAnnotationValues);
         pgxSnp.setHwe(variant.getHwePvalue());
+        pgxSnp.setMaf(variant.getMinorAlleleFrequency());
 
         pgxSnp.setAvailable(pgxSnp.getrSquared() > R_SQUARED_CUT_OFF);
-        pgxGene.updateSnpInfoOnHaplotypes(pgxSnp);
+        pgxGene.updateSnpInfo(pgxSnp);
         //            removePgxSnpFromGene(pgxGene, pgxSnp);
 
         Snp referenceSnp = pgxSnp.copySnp(pgxSnp);
@@ -178,14 +196,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
     }
 
     private void removePgxSnpFromGene(PgxGene pgxGene, Snp pgxSnp) {
-        pgxGene.getWildType().removeSnp(pgxSnp);
-
-        // Remove SNP on all haplotypes and remove haplotype when empty
-        for (Iterator<Map.Entry<String, PgxHaplotype>> it = pgxGene.getPgxHaplotypes().entrySet().iterator(); it.hasNext(); ) {
-            PgxHaplotype haplotype = it.next().getValue();
-            haplotype.removeSnp(pgxSnp);
-            if (haplotype.getSnps().size() == 0) it.remove();
-        }
+        pgxGene.removeVariant(pgxSnp);
     }
 
     private boolean isEqualSamples(List<Sample> samples) {
@@ -199,19 +210,41 @@ public class VcfHaplotypeReader implements HaplotypeReader {
 
         FileWriter fileWriter = new FileWriter(pgxGeneInfoFile.getAbsoluteFile());
         BufferedWriter bw = new BufferedWriter(fileWriter);
+        //"Haplotype", "SNP", "Position", "Reference_allele", "Variant_allele", "Status", "R_squared", "MAF"
+        String[] fixedColumns = new String[]{
+                "Haplotype", "SNP", "Position", "Reference_allele", "Variant_allele", "Status", "Calculated_Hwe", "Calculated_Maf"};
+        List<String> infoColumns = pgxGene.getAnnotationFields();
 
-        bw.write("Haplotype\tSNP\tPosition\tReference_allele\tVariant_allele\tStatus\tR_squared\tMAF\n");
+        String header = Stream.concat(Stream.of(fixedColumns), infoColumns.stream().map(e -> "Info_" + e))
+                .collect(Collectors.joining("\t")).concat("\n");
+        bw.write(header);
 
         for (PgxHaplotype pgxHaplotype : pgxGene.getPgxHaplotypes().values()) {
+            Map<String, String> variantAlleles = pgxHaplotype.getVariantAlleles();
             for (Snp haplotypeSnp : pgxHaplotype.getSnps().values()) {
+                String variantAllele = variantAlleles.get(haplotypeSnp.getId());
                 String isAvailable = "NOT AVAILABLE";
                 if (haplotypeSnp.isAvailable()) isAvailable = "AVAILABLE";
                 else if (haplotypeSnp.getrSquared() != null &&
                         haplotypeSnp.getrSquared() < R_SQUARED_CUT_OFF)
                     isAvailable = "LOW_IMPUTATION_PROBABILITY";
-                bw.write(pgxHaplotype.getName() + "\t" + haplotypeSnp.getId() + "\t" + haplotypeSnp.getPos() + "\t");
-                bw.write(haplotypeSnp.getReferenceAllele() + "\t" + haplotypeSnp.getVariantAllele() + "\t");
-                bw.write(isAvailable + "\t" + haplotypeSnp.getrSquared() + "\t" + haplotypeSnp.getMaf() + "\n");
+
+                String mafFormatted = "na";
+                Double maf = haplotypeSnp.getMaf();
+                if (maf != null) {
+                    mafFormatted = Double.toString(maf);
+                }
+
+                List<String> outputValues = new ArrayList<>(Arrays.asList(
+                        pgxHaplotype.getName(),
+                        haplotypeSnp.getId(),
+                        Integer.toString(haplotypeSnp.getPos()),
+                        haplotypeSnp.getReferenceAllele(),
+                        variantAllele,
+                        isAvailable,
+                        Double.toString(haplotypeSnp.getHwe()),
+                        mafFormatted));
+
                 // Write:
                 // - availability
                 // - reported MAF
@@ -219,7 +252,18 @@ public class VcfHaplotypeReader implements HaplotypeReader {
                 // - MAF from reference
                 // - calculated HWE
                 // - R2
-                //
+                Map<String, ?> annotations = haplotypeSnp.getAnnotations();
+                for (String column : infoColumns) {
+                    if (annotations.containsKey(column)) {
+                        outputValues.add(String.valueOf(annotations.get(column)));
+                    } else {
+                        outputValues.add("na");
+                    }
+                }
+
+                String line = String.join("\t", outputValues).concat("\n");
+                bw.write(line);
+
             }
         }
 
@@ -231,7 +275,8 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         ConfigProvider configProvider = ConfigProvider.getInstance();
         //load dirs
         STAR_ALLELE_OUTPUT_DIR = configProvider.getConfigParam(ConfigConstants.STAR_ALLELE_OUTPUT_DIR);
-        STAR_ALLELE_OUTPUT_DIR = "/groups/umcg-gdio/tmp01/projects/2021001/pgx-pipeline/analyses/impute_pgx_genes/out/20221103/postimpute/";
+        STAR_ALLELE_OUTPUT_DIR = "/groups/umcg-gdio/tmp01/projects/2021001/pgx-pipeline/analyses/pharmvar_overlap/";
+//        STAR_ALLELE_OUTPUT_DIR = "/Users/cawarmerdam/Documents/projects/pgx-passport/results/1000g/analyses/pharmvar_overlap/";
     }
 
 }

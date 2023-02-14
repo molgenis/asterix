@@ -74,24 +74,27 @@ public class SnpToHaploTableReader {
         if (id.equals("-")) snp.setId(snp.getChr() + ":" + snp.getPos() + ":" + snp.getReferenceAllele());
         else snp.setId(id);
 
-
         if (snp.getPos() > gene.getEndPos()) gene.setEndPos(snp.getPos());
         if (snp.getPos() < gene.getStartPos()) gene.setStartPos(snp.getPos());
 
-        if (splitLine[7].equals("-")) snp.setVariantAllele(splitLine[6]); // TODO what about indels
-        else snp.setVariantAllele(splitLine[7]);
+        //if (splitLine[7].equals("-")) snp.setVariantAllele(splitLine[6]); // TODO what about indels
+        //else snp.setVariantAllele(splitLine[7]);
+        snp.setVariantAllele(splitLine[7]);
 
-        if (!gene.getWildType().hasSnp(snp)) {
-            Snp wildTypeSnp = snp.copySnp(snp);
-            wildTypeSnp.setVariantAllele(wildTypeSnp.getReferenceAllele());
-            gene.getWildType().addSnp(wildTypeSnp);
+        if (!gene.hasVariant(snp)) {
+            gene.addVariant(snp);
         }
+
+        if (!gene.getWildType().hasVariantAllele(snp.getId())) {
+            gene.getWildType().addVariantAlleles(snp.getId(), snp.getReferenceAllele());
+        }
+
         if (gene.getPgxHaplotypes().containsKey(haplotypeName)) {
             PgxHaplotype pgxHaplotype = gene.getPgxHaplotypes().get(haplotypeName);
-            pgxHaplotype.addSnp(snp);
+            pgxHaplotype.addVariantAlleles(snp.getId(), snp.getVariantAllele());
         } else {
-            PgxHaplotype pgxHaplotype = new PgxHaplotype(haplotypeName);
-            pgxHaplotype.addSnp(snp);
+            PgxHaplotype pgxHaplotype = new PgxHaplotype(gene, haplotypeName);
+            pgxHaplotype.addVariantAlleles(snp.getId(), snp.getVariantAllele());
             gene.getPgxHaplotypes().put(haplotypeName, pgxHaplotype);
         }
     }

@@ -1,5 +1,9 @@
 package org.molgenis.asterix.model;
 
+import org.molgenis.genotype.annotation.Annotation;
+
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public class Snp {
@@ -16,6 +20,7 @@ public class Snp {
     private Double maf;
     private boolean isAvailable;
     private double hwePvalue;
+    private Map<String, String> annotationValues;
 
     public int getChr() {
         return chr;
@@ -108,7 +113,7 @@ public class Snp {
     public Snp copySnp(Snp snpToCopy) {
         Snp snp = new Snp();
         snp.setVariantAllele(snpToCopy.getVariantAllele());
-        snp.setReferenceAllele(snpToCopy.getVariantAllele());
+        snp.setReferenceAllele(snpToCopy.getReferenceAllele());
         snp.setPos(snpToCopy.getPos());
         snp.setChr(snpToCopy.getChr());
         snp.setId(snpToCopy.getId());
@@ -117,6 +122,7 @@ public class Snp {
         snp.setMaf(snpToCopy.getMaf());
         snp.setrSquared(snpToCopy.getrSquared());
         snp.setAvailable(snpToCopy.isAvailable());
+        snp.setAnnotations(snpToCopy.getAnnotations());
 
         return snp;
     }
@@ -162,5 +168,20 @@ public class Snp {
 
     public void setHwe(double hwePvalue) {
         this.hwePvalue = hwePvalue;
+    }
+
+    public void setAnnotations(Map<String, String> annotationValues) {
+        this.annotationValues = annotationValues;
+    }
+
+    public Map<String, String> getAnnotations() {
+        if (annotationValues == null) {
+            return new HashMap<>();
+        }
+        return annotationValues;
+    }
+
+    public double getHwe() {
+        return hwePvalue;
     }
 }
