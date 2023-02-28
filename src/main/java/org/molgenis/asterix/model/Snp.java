@@ -1,7 +1,5 @@
 package org.molgenis.asterix.model;
 
-import org.molgenis.genotype.annotation.Annotation;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -139,15 +137,6 @@ public class Snp {
                 ", rSquared=" + rSquared +
                 '}';
     }
-
-/*    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Snp snp = (Snp) o;
-        return Objects.equals(id, snp.id) &&
-                Objects.equals(variantAllele, snp.variantAllele);
-    }*/
 
     @Override
     public boolean equals(Object o) {

@@ -8,8 +8,6 @@ import java.io.IOException;
 
 public class StarAlleleChecker {
 
-    private static String IMPUTED_SNP_DIR = "/groups/umcg-gdio/tmp01/projects/2021001/pgx-pipeline/analyses/impute_pgx_genes/out/20221103/postimpute";
-    private static String SNP_HAPLO_TABLE_DIR = "/groups/umcg-fg/tmp01/projects/pgx-passport/data/public/pharmvar-5.2.14_haplotypes";
     private String imputedSnpDir;
     private String snpHaploTableDir;
 
