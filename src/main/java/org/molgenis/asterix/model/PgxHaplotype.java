@@ -15,29 +15,22 @@ public class PgxHaplotype {
         this.gene = gene;
     }
 
-//    public void addSnp(Snp snp) {
-//        snps.put(snp.getId(), snps);
-//    }
-
-//    public boolean hasSnp(Snp snp) {
-//        return snps.containsKey(snp.getId());
-//    }
-
-//    public void removeSnp(Snp snp) {
-//        snps.remove(snp.getId());
-//    }
-
     public Map<String, Snp> getSnps() {
         Map<String, Snp> snps = new HashMap<>();
         for (String id: this.variantAlleles.keySet()) {
-            snps.put(id, this.gene.getVariants().get(id));
+            Snp snp = new Snp().copySnp(this.gene.getVariants().get(id));
+            snp.setVariantAllele(this.variantAlleles.get(id));
+            snps.put(id, snp);
         }
         return snps;
     }
 
-//    public void setSnps(Map<String, Snp> snps) {
-//        this.snps = snps;
-//    }
+    public Map<String, Snp> getSnpsWithWildType() {
+        Map<String, Snp> snps = gene.getWildType().getSnps();
+        snps.putAll(this.getSnps());
+
+        return snps;
+    }
 
     public String getName() {
         return name;
