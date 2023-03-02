@@ -24,7 +24,6 @@ public class SnpToHaploTableReader {
 
     public void readSnpHaploTables() throws IOException {
         File[] snpHaploTables = new File(haplotypeTableDir).listFiles(file -> !file.isHidden());
-
         for (File snpHaploTable : snpHaploTables) {
             try (BufferedReader br = new BufferedReader(new FileReader(snpHaploTable))) {
                 br.readLine();
@@ -57,7 +56,8 @@ public class SnpToHaploTableReader {
 
     private void addSnpToHaplotype(PgxGene gene, String line) {
         String[] splitLine = line.split("\t");
-        if (splitLine.length != 9) {
+
+        if (splitLine.length < 9) {
             System.out.println(line);
             throw new IllegalArgumentException("Invalid number of lines in translation table");
         }
@@ -77,8 +77,6 @@ public class SnpToHaploTableReader {
         if (snp.getPos() > gene.getEndPos()) gene.setEndPos(snp.getPos());
         if (snp.getPos() < gene.getStartPos()) gene.setStartPos(snp.getPos());
 
-        //if (splitLine[7].equals("-")) snp.setVariantAllele(splitLine[6]); // TODO what about indels
-        //else snp.setVariantAllele(splitLine[7]);
         snp.setVariantAllele(splitLine[7]);
 
         if (!gene.hasVariant(snp)) {

@@ -67,10 +67,11 @@ public class VcfHaplotypeReader implements HaplotypeReader {
                         i++;
                         System.out.print("Processing PGx gene " + pgxGene.getName() + " SNP " + i + "/" + pgxSnpsInGene.size() + "\r");
                         GeneticVariant genotypesVariant = matchGeneticVariant(genotypeData, pgxSnp);
-                        presentCount++;
                         if (genotypesVariant == null) {
+                            System.out.println("SNP " + pgxGene.getName() + " " + pgxSnp.getId() + " not available");
                             pgxSnp.setAvailable(false);
                         } else {
+                            presentCount++;
                             parseSnp(genotypesVariant, variantAnnotationsMap, pgxSnp, pgxGene);
                         }
                     }
@@ -86,7 +87,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         GeneticVariant matchedVariant = null;
         Alleles pgxSnpAlleles = Alleles.createBasedOnString(pgxSnp.getReferenceAllele(), pgxSnp.getVariantAllele());
         Iterable<GeneticVariant> positionalMatches = genotypeData.getVariantsByPos(Integer.toString(pgxSnp.getChr()), pgxSnp.getPos());
-        for (GeneticVariant candidateVariant:positionalMatches) {
+        for (GeneticVariant candidateVariant :positionalMatches) {
             if (candidateVariant.getVariantAlleles().sameAlleles(pgxSnpAlleles)) {
                 if (matchedVariant != null) {
                     System.out.println("pgxSnp = " + pgxSnp);
@@ -144,7 +145,8 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         pgxSnp.setHwe(variant.getHwePvalue());
         pgxSnp.setMaf(variant.getMinorAlleleFrequency());
 
-        pgxSnp.setAvailable(pgxSnp.getrSquared() > R_SQUARED_CUT_OFF);
+        //pgxSnp.setAvailable(pgxSnp.getrSquared() > R_SQUARED_CUT_OFF);
+        pgxSnp.setAvailable(true);
         pgxGene.updateSnpInfo(pgxSnp);
         //            removePgxSnpFromGene(pgxGene, pgxSnp);
 
@@ -163,7 +165,6 @@ public class VcfHaplotypeReader implements HaplotypeReader {
 
             double[][] sample = sampleGenotypeProbabilitiesPhased[i];
 
-            // TODO: Should implement min max for probability?
             double probabilityReferenceAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX];
             if (probabilityReferenceAlleleHaplotype0 > 0.5) {
                 referenceSnp.setProbability(probabilityReferenceAlleleHaplotype0);
@@ -275,8 +276,6 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         ConfigProvider configProvider = ConfigProvider.getInstance();
         //load dirs
         STAR_ALLELE_OUTPUT_DIR = configProvider.getConfigParam(ConfigConstants.STAR_ALLELE_OUTPUT_DIR);
-        STAR_ALLELE_OUTPUT_DIR = "/groups/umcg-gdio/tmp01/projects/2021001/pgx-pipeline/analyses/pharmvar_overlap/";
-//        STAR_ALLELE_OUTPUT_DIR = "/Users/cawarmerdam/Documents/projects/pgx-passport/results/1000g/analyses/pharmvar_overlap/";
     }
 
 }

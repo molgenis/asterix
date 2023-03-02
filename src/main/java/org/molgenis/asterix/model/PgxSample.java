@@ -1,9 +1,6 @@
 package org.molgenis.asterix.model;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
 
 public class PgxSample {
 
@@ -17,6 +14,22 @@ public class PgxSample {
         this.id = id;
         haplotype0 = new HashMap<>();
         haplotype1 = new HashMap<>();
+    }
+
+    public Set<Snp> getHaplotype0(Map<String, Snp> snps) {
+        Set<Snp> returnSnps = new HashSet<>();
+        for (Snp snp :snps.values()) {
+            returnSnps.add(haplotype0.get(snp.getId()));
+        }
+        return returnSnps;
+    }
+
+    public Set<Snp> getHaplotype1(Map<String, Snp> snps) {
+        Set<Snp> returnSnps = new HashSet<>();
+        for (Snp snp :snps.values()) {
+            returnSnps.add(haplotype1.get(snp.getId()));
+        }
+        return returnSnps;
     }
 
     public Map<String, Snp> getHaplotype0() {

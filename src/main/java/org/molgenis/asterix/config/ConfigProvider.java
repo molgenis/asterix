@@ -174,21 +174,9 @@ public class ConfigProvider {
         this.helpFormatter.printHelp("org/molgenis/asterix", this.options);
     }
 
-    /*
-    following method \/ uses .properties file that would/can contain the following
-
-    STAR_ALLELE_OUTPUT_DIR=C:\\molgenis\\asterix_data\\star_alleles\\
-    SNP_HAPLO_TABLE_DIR=C:\\molgenis\\asterix_data\\snp_to_haplo\\
-    HAPLOTYPE_DIR=C:\\molgenis\\asterix_data\\ll_phased_active\\
-    HAPLO_PHENO_TABLE_DIR=C:\\molgenis\\asterix_data\\haplo_to_pheno\\
-    PREDICTED_PHENOTYPES_OUTPUT_DIR=C:\\molgenis\\asterix_data\\predicted_phenotypes\\
-    SAMPLE_MATRIX_OUT=C:\\molgenis\\asterix_data\\sample_matrix.csv
-    SPLIT_SAMPLES_PP=false
-
-     */
-
     /**
      * load config from a .properties file
+     *
      * @param pathToFile the path to the .properties file
      */
     private void loadExternalPropertiesFile(String pathToFile){
