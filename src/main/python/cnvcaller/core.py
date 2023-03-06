@@ -912,8 +912,8 @@ class NaiveGenotypeClustering:
         # Mean indices gives the indices on how to sort the resp;
         # [0, 1] would mean that 0 should be first, 1 should be last
         # [1, 0] would mean that 1 should be first, 0 should be last
-        reverting_array = np.empty((n_genotype_clusters,))
-        reverting_array[mean_indices] = np.arange(n_genotype_clusters)
+        reverting_array = np.empty((n_genotype_clusters,), dtype=int)
+        reverting_array[mean_indices] = np.arange(n_genotype_clusters, dtype=int)
         # summing this with the best_insertion_pos results in the
         # genotypes that each resp part represents
         a_dosages = candidate_genotypes[best_insertion_pos:best_insertion_pos+n_genotype_clusters]
@@ -1559,7 +1559,7 @@ def extract_intensity_matrices(intensity_data_frame, value_to_use, variants_in_l
     return a_matrix, b_matrix, intensity_matrix
 
 
-def load_intensity_data_frame(in_directory, out_directory, sample_list, value_to_use):
+def load_intensity_data_frame(in_directory, out_directory, sample_list, value_to_use, variants_in_locus):
     print("Loading intensity data...")
     intensity_data_frame_reader = IntensityDataReader(sample_list["Sample_ID"])
     intensity_data_frame = intensity_data_frame_reader.load(in_directory)
@@ -1575,6 +1575,9 @@ def load_intensity_data_frame(in_directory, out_directory, sample_list, value_to
         "Writing matrix to: {}    {}"
         .format(os.linesep, intensity_matrix_file_path),
         end=os.linesep * 2)
+    intensity_data_frame.loc[variants_in_locus.Name].to_csv(
+        intensity_data_frame_file_path,
+        sep="\t", index_label='variant')
     return intensity_data_frame
 
 
@@ -1703,7 +1706,7 @@ def main(argv=None):
         # Load intensity data
         print("Loading intensity data...")
         intensity_data_frame = load_intensity_data_frame(
-            args.input, args.out, sample_list, value_to_use)
+            args.input, args.out, sample_list, value_to_use, variants_in_locus)
 
         a_matrix, b_matrix, intensity_matrix = extract_intensity_matrices(
             intensity_data_frame, value_to_use, variants_in_locus)
@@ -1779,8 +1782,8 @@ def main(argv=None):
         value_to_use = args.config['base']['value']
 
         # Load intensity data
-        intensity_data_frame = load_intensity_data_frame(
-            args.input, args.out, sample_list, value_to_use)
+        intensity_data_frame = load_intensity_data_frame(args.input, args.out, sample_list, value_to_use,
+                                                         variants_in_locus)
 
         a_matrix, b_matrix, intensity_matrix = extract_intensity_matrices(
             intensity_data_frame, value_to_use, variants_in_locus)
