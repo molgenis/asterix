@@ -340,7 +340,6 @@ class ArgumentParser:
             self.SubCommand.CALL:
                 {self.add_staged_data_argument,
                  self.add_variant_prefix_argument,
-                 self.add_batch_weights_argument,
                  self.add_calling_cluster_weight_argument}}
         methods_to_run = set.union(*[sub_command_mapping.get(sub_command) for sub_command in self.sub_commands])
         if self.add_staged_data_argument in methods_to_run and self.add_staged_data_output_argument in methods_to_run:
@@ -352,16 +351,11 @@ class ArgumentParser:
                             required=False, default=0,
                             help="number of variants or kb to extend the locus of interest"
                                  "for variants")
-    def add_batch_weights_argument(self, parser):
-        parser.add_argument('-C', '--correction', type=self.is_readable_dir,
+    def add_calling_cluster_weight_argument(self, parser):
+        parser.add_argument('-C', '--cluster-file', type=self.is_readable_dir,
                             required=True, default=None,
                             help="path where batch correction weights, and corrected data are stored."
                                  "output of the batch weighting step")
-    def add_calling_cluster_weight_argument(self, parser):
-        parser.add_argument('-F', '--cluster-file', type=self.is_readable_dir,
-                            required=True, nargs='+', default=None,
-                            help="path where cluster weights are stored."
-                                 "output of the fitting step")
     def add_bead_pool_manifest_argument(self, parser):
         parser.add_argument('-bpm', '--bead-pool-manifest', type=self.is_readable_file,
                             required=True, default=None,
@@ -1818,7 +1812,7 @@ def main(argv=None):
             intensity_data_frame, value_to_use, variants_in_locus)
 
         # Do correction of intensities
-        intensity_correction = IntensityCorrection.load_instance(args.correction)
+        intensity_correction = IntensityCorrection.load_instance(args.cluster_file)
         print("Calculating PCA loadings for genome-wide batch effects...")
         batch_effects = intensity_correction.batch_effects(
             reference_intensity_data=intensity_matrix.T)
@@ -1843,7 +1837,7 @@ def main(argv=None):
 
         intensity_dataset.write_dataset(args.out)
 
-        cnv_caller = SnpIntensityCnvCaller.load_instance(args.correction)
+        cnv_caller = SnpIntensityCnvCaller.load_instance(args.cluster_file)
         cnv_caller.write_fit(intensity_dataset, args.out)
 
         print("Done!")
