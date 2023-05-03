@@ -1307,7 +1307,7 @@ class SnpIntensityCnvCaller:
         print(np.unique(assignments, return_counts=True))
         print(np.unique(resp_to_assignments(proba), return_counts=True))
         return sample_concordance
-    @classmethodA
+    @classmethod
     def load_instance(cls, path):
         return pickle.load(open(
             ".".join([path, "cnv_calling", "mod", "pkl"]), "rb"))
