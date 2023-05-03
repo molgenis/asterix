@@ -1307,7 +1307,7 @@ class SnpIntensityCnvCaller:
         print(np.unique(assignments, return_counts=True))
         print(np.unique(resp_to_assignments(proba), return_counts=True))
         return sample_concordance
-    @classmethod
+    @classmethodA
     def load_instance(cls, path):
         return pickle.load(open(
             ".".join([path, "cnv_calling", "mod", "pkl"]), "rb"))
@@ -1832,8 +1832,6 @@ def main(argv=None):
         intensity_dataset = get_corrected_complex_dataset(
             a_matrix, b_matrix, corrected_intensities, intensity_matrix,
             variants_in_locus, variant_selection)
-        cnv_caller = SnpIntensityCnvCaller.load_instance(args.fit)
-        cnv_caller.predict(intensity_dataset)
 
         intensity_dataset.write_dataset(args.out)
 
