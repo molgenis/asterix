@@ -19,7 +19,8 @@ public class PgxSample {
     public Set<Snp> getHaplotype0(Map<String, Snp> snps) {
         Set<Snp> returnSnps = new HashSet<>();
         for (Snp snp :snps.values()) {
-            returnSnps.add(haplotype0.get(snp.getId()));
+            Snp snpOnHaplotype = haplotype0.get(snp.getId());
+            if (snpOnHaplotype != null) returnSnps.add(snpOnHaplotype);
         }
         return returnSnps;
     }
@@ -27,7 +28,8 @@ public class PgxSample {
     public Set<Snp> getHaplotype1(Map<String, Snp> snps) {
         Set<Snp> returnSnps = new HashSet<>();
         for (Snp snp :snps.values()) {
-            returnSnps.add(haplotype1.get(snp.getId()));
+            Snp snpOnHaplotype = haplotype1.get(snp.getId());
+            if (snpOnHaplotype != null) returnSnps.add(snpOnHaplotype);
         }
         return returnSnps;
     }
@@ -63,4 +65,5 @@ public class PgxSample {
     public void setId(String id) {
         this.id = id;
     }
+
 }

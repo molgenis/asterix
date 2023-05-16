@@ -2,16 +2,16 @@ package org.molgenis.asterix.pipeline;
 
 import org.molgenis.asterix.config.ConfigConstants;
 import org.molgenis.asterix.config.ConfigProvider;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
+import org.molgenis.asterix.model.PGxDiplotype;
 import org.molgenis.asterix.model.PgxGene;
 import org.molgenis.asterix.model.PgxHaplotype;
 import org.molgenis.asterix.model.PgxSample;
-import org.molgenis.asterix.pipeline.HaplotypeToStarAllele;
 
 import java.io.*;
 import java.util.*;
 
 public class StarAlleleToPhenotype {
+
 
     //internal value, to switch from having the value names in a vertical column or as header
     private static boolean VALUE_NAME_VERTICAL = false;
@@ -28,11 +28,11 @@ public class StarAlleleToPhenotype {
     //config provider for command line supplied parameters
     private ConfigProvider configProvider = null;
 
-
     private SortedMap<String, PgxGene> genes;
 
+    private Map<Set<PgxHaplotype>, PGxDiplotype> diplotypes = new HashMap<>();
+
     /**
-     *
      * @param genes
      */
     public StarAlleleToPhenotype(SortedMap<String, PgxGene> genes) {
@@ -48,74 +48,48 @@ public class StarAlleleToPhenotype {
 
     private void readConversionTables() throws IOException {
 
-        //list of files used as input to map staralles to function
-        File[] alleleFunctionTables = new File(CONVERSION_TABLE_DIR).listFiles((FileFilter) new WildcardFileFilter("*alleles.txt"));
-        //list of files of functions to predicted phenotypes
-        File[] phenotypeTables = new File(CONVERSION_TABLE_DIR).listFiles((FileFilter) new WildcardFileFilter("*phenotype.txt"));
-
-        for (File alleleFunctionTable : alleleFunctionTables) {
-            try (BufferedReader br = new BufferedReader(new FileReader(alleleFunctionTable))) {
-                br.readLine();
-                String line = br.readLine();
-                String[] splitLine = line.split("\t");
-
-                String geneName = splitLine[0];
-                PgxGene pgxGene = genes.get(geneName);
-
-                while (line != null) {
-                    splitLine = line.split("\t");
-                    String starAlleleName = splitLine[1];
-                    String function = splitLine[2];
-
-                    PgxHaplotype pgxHaplotype = pgxGene.getPgxHaplotypes().get(starAlleleName);
-
-                    if (pgxHaplotype == null) System.out.println(starAlleleName);
-
-                    pgxHaplotype.setFunction(function);
-
-
-                    line = br.readLine();
-                }
-
-            }
-        }
+        File[] phenotypeTables = new File(CONVERSION_TABLE_DIR).listFiles();
 
         for (File phenotypeTable : phenotypeTables) {
             try (BufferedReader br = new BufferedReader(new FileReader(phenotypeTable))) {
+                br.readLine(); // skip header
                 String line = br.readLine();
-                String[] splitLine = line.split("\t");
-
-                String geneName = splitLine[0];
-                PgxGene pgxGene = genes.get(geneName);
-
-                String[] functions = Arrays.copyOfRange(splitLine, 1, splitLine.length);
-
-                //TODO: remove me
-                if (pgxGene == null) System.out.println(geneName);
-
-                Map<List<String>, String> functionToPredictedPhenotype = pgxGene.getFunctionToPredictedPhenotype();
-
-                line = br.readLine();
-                int i = 0;
+                readLine:
                 while (line != null) {
-                    splitLine = line.split("\t");
+                    String[] splitLine = line.split("\t");
 
-                    for (int j = 0; j < splitLine.length - 1 ; j++) {
-                        functionToPredictedPhenotype.put(
-                                Collections.unmodifiableList(Arrays.asList(functions[i], functions[j])),
-                                splitLine[j+1]);
+                    String geneName = splitLine[0];
+                    PgxGene pgxGene = genes.get(geneName);
+
+                    String[] diplotypeArray = splitLine[1].split("/");
+
+                    Set<PgxHaplotype> haplotypes = new HashSet<>();
+                    for (String haplotypeId : diplotypeArray) {
+                        String haplotypeName = pgxGene.getName() + haplotypeId;
+                        PgxHaplotype haplotype = pgxGene.getPgxHaplotypes().get(haplotypeName);
+                        if (haplotype == null) {
+                            System.out.println("Haplotype " + haplotypeName + " in function table, not available in snp table");
+                            line = br.readLine();
+                            continue readLine;
+                        }
+                        haplotypes.add(haplotype);
                     }
 
-                    i++;
+                    PGxDiplotype diplotype = new PGxDiplotype();
+                    diplotype.setPredictedPhenotype(splitLine[3]);
+                    diplotype.setContraindication(splitLine[4]);
+                    diplotype.setHaplotypes(haplotypes);
+
+                    this.diplotypes.put(haplotypes, diplotype);
                     line = br.readLine();
                 }
             }
         }
-
     }
 
     /**
      * determine the phenotypes of the samples from their star alleles (values will be set to the
+     *
      * @param haplotypeToStarAllele Object to get star alleles from, and set the predicted phenotype for
      * @throws IOException
      */
@@ -126,38 +100,33 @@ public class StarAlleleToPhenotype {
 
         for (PgxSample sample : samples.values()) {
             for (PgxGene gene : sample.getGenes().values()) {
+                //PgxGene geneWithInfo = this.genes.get(gene.getName());
+                if (gene.getAllele0() == null | gene.getAllele1() == null) continue;
+                Set<PgxHaplotype> haplotypes = new HashSet<>();
+                haplotypes.add(new PgxHaplotype(gene, gene.getAllele0()));
+                haplotypes.add(new PgxHaplotype(gene, gene.getAllele1()));
 
-                PgxGene geneWithInfo = this.genes.get(gene.getName());
+                PGxDiplotype diplotype = diplotypes.get(haplotypes);
+                if (diplotype == null) continue;
 
-                //TODO Fix this Alleles shouldn't be null
-                if (gene.getAllele0() == null) continue;
-                if (gene.getAllele1() == null) continue;
-
-                String functionAllele0 = geneWithInfo.getPgxHaplotypes().get(gene.getAllele0()).getFunction();
-                String functionAllele1 = geneWithInfo.getPgxHaplotypes().get(gene.getAllele1()).getFunction();
-
-                Map<List<String>, String> functionToPredictedPhenotype = this.genes.get(gene.getName()).getFunctionToPredictedPhenotype();
-                String predictedPhenotype = functionToPredictedPhenotype.get(Arrays.asList(functionAllele0, functionAllele1));
-
-                gene.setPredictedPhenotype(predictedPhenotype);
+                gene.setPredictedPhenotype(diplotype.getPredictedPhenotype());
             }
         }
-
 
 
     }
 
     /**
      * write the phenotypes that were predicted
+     *
      * @param haplotypeToStarAllele Object containing the samples and their predicted phenotypes
      * @throws IOException
      */
-    public void writePhenotypes(HaplotypeToStarAllele haplotypeToStarAllele) throws IOException{
+    public void writePhenotypes(HaplotypeToStarAllele haplotypeToStarAllele) throws IOException {
         new File(PREDICTED_PHENOTYPES_OUTPUT_DIR).mkdirs();
 
         Map<String, PgxSample> samples = haplotypeToStarAllele.getSamples();
 
-        //write resulting phenotypes to matrix/matrices
         writeSampleMatrix(haplotypeToStarAllele, samples);
 
         for (PgxGene pgxGene : haplotypeToStarAllele.getGenes().values()) {
@@ -169,9 +138,7 @@ public class StarAlleleToPhenotype {
             BufferedWriter bw = new BufferedWriter(fileWriter);
 
             for (PgxSample sample : samples.values()) {
-                //TODO due to decoupling of previously linked methods, the predicted phenotype might be null if the user uses the methods in the wrong order
-                String line = sample.getId() + "\t" + sample.getGenes().get(pgxGene.getName()).getPredictedPhenotype() + "\n";
-                bw.write(line);
+                bw.write(sample.getId() + "\t" + sample.getGenes().get(pgxGene.getName()).getPredictedPhenotype() + "\n");
             }
 
             bw.close();
@@ -180,31 +147,31 @@ public class StarAlleleToPhenotype {
 
     /**
      * write the sample matrix
+     *
      * @param haplotypeToStarAllele the object containing the phenotype and haplotypes
-     * @param samples the list of samples to write
+     * @param samples               the list of samples to write
      * @throws IOException
      */
-    private static void writeSampleMatrix(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException{
-        if(SPLIT_SAMPLE_MATRIX_PP){
+    private static void writeSampleMatrix(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException {
+        if (SPLIT_SAMPLE_MATRIX_PP) {
             writeSampleMatrixSplit(haplotypeToStarAllele, samples);
-        }
-        else{
+        } else {
             writeSampleMatrixCombined(haplotypeToStarAllele, samples);
         }
     }
 
     /**
      * write the sample matrix, with a new file for each sample
+     *
      * @param haplotypeToStarAllele the object containing the phenotype and haplotypes
-     * @param samples the list of samples to write
+     * @param samples               the list of samples to write
      * @throws IOException
      */
-    private static void writeSampleMatrixSplit(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException{
+    private static void writeSampleMatrixSplit(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException {
         //decide on a vertical or horizontal values file
-        if(VALUE_NAME_VERTICAL){
+        if (VALUE_NAME_VERTICAL) {
             writeSampleMatrixSplitVertical(haplotypeToStarAllele, samples);
-        }
-        else{
+        } else {
             writeSampleMatrixSplitHorizontal(haplotypeToStarAllele, samples);
         }
     }
@@ -219,11 +186,12 @@ public class StarAlleleToPhenotype {
 
     /**
      * write the sample matrix per sample, with a header and the values, which means a two line file is created
+     *
      * @param haplotypeToStarAllele the object containing the phenotype and haplotypes
-     * @param samples the list of samples to write
+     * @param samples               the list of samples to write
      * @throws IOException
      */
-    private static void writeSampleMatrixSplitHorizontal(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws  IOException{
+    private static void writeSampleMatrixSplitHorizontal(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException {
         //get the header
         String header = getSampleMatrixHeader(haplotypeToStarAllele);
         //using stringbuilder is more efficient than keep concatenating strings
@@ -237,9 +205,7 @@ public class StarAlleleToPhenotype {
 
             //create the directory if it does not exist yet
             File dir = new File(SAMPLE_MATRIX_OUT);
-            if (!dir.exists()){
-                dir.mkdirs();
-            }
+            if (!dir.exists()) dir.mkdirs();
 
             //setup the writer
             File sampleMatrixFile = new File(filePath);
@@ -284,11 +250,12 @@ public class StarAlleleToPhenotype {
 
     /**
      * write the values for one sample to a matrix, with the value name and value on a new line each
+     *
      * @param haplotypeToStarAllele the object containing the pgxgenes and their names
-     * @param samples the list of samples to write
+     * @param samples               the list of samples to write
      * @throws IOException
      */
-    private static void writeSampleMatrixSplitVertical(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws  IOException{
+    private static void writeSampleMatrixSplitVertical(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException {
         //using stringbuilder is more efficient than keep concatenating strings
         StringBuilder stringBuilder = new StringBuilder();
         //go through each sample
@@ -300,7 +267,7 @@ public class StarAlleleToPhenotype {
 
             //create the directory if it does not exist yet
             File dir = new File(SAMPLE_MATRIX_OUT);
-            if (!dir.exists()){
+            if (!dir.exists()) {
                 dir.mkdirs();
             }
 
@@ -347,11 +314,12 @@ public class StarAlleleToPhenotype {
 
     /**
      * write the sample matrix to one file
+     *
      * @param haplotypeToStarAllele the object containing the pgxgenes and their names
-     * @param samples the list of samples to write
+     * @param samples               the list of samples to write
      * @throws IOException
      */
-    private static void writeSampleMatrixCombined(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException{
+    private static void writeSampleMatrixCombined(HaplotypeToStarAllele haplotypeToStarAllele, Map<String, PgxSample> samples) throws IOException {
         //File sampleMatrixFile = new File("/Users/harmbrugge/Documents/PGx/data/richtlijn/sample_matrix.csv");
         //File sampleMatrixFile = new File("C:\\molgenis\\asterix_data\\sample_matrix.csv");
         File sampleMatrixFile = new File(SAMPLE_MATRIX_OUT);
@@ -378,7 +346,9 @@ public class StarAlleleToPhenotype {
             //write each phenotype
             for (PgxGene pgxGene : sample.getGenes().values()) {
                 bw0.write(",");
-                bw0.write(pgxGene.getPredictedPhenotype());
+                if (pgxGene.getPredictedPhenotype() == null) {
+                    bw0.write("NA");
+                } else bw0.write(pgxGene.getPredictedPhenotype());
             }
 
             bw0.newLine();
@@ -389,15 +359,16 @@ public class StarAlleleToPhenotype {
 
     /**
      * get the header for the sample matrix
+     *
      * @param haplotypeToStarAllele the object containing the pgxgenes and their names
-     * @param sampleColumnName the name to give the column containing the sample identifier
+     * @param sampleColumnName      the name to give the column containing the sample identifier
      * @return the header created for the sample matrix
      */
-    private static String getSampleMatrixHeader(HaplotypeToStarAllele haplotypeToStarAllele, String sampleColumnName){
+    private static String getSampleMatrixHeader(HaplotypeToStarAllele haplotypeToStarAllele, String sampleColumnName) {
         //set initial value before null-check
         String nullSafeSampleName = "";
         //overwrite if something else than null was supplied
-        if(null != sampleColumnName){
+        if (null != sampleColumnName) {
             nullSafeSampleName = sampleColumnName;
         }
         //use stringbuilder object
@@ -419,19 +390,19 @@ public class StarAlleleToPhenotype {
 
     /**
      * get the header for the sample matrix
+     *
      * @param haplotypeToStarAllele the object containing the pgxgenes and their names
      * @return the header created for the sample matrix
      */
-    private static String getSampleMatrixHeader(HaplotypeToStarAllele haplotypeToStarAllele){
+    private static String getSampleMatrixHeader(HaplotypeToStarAllele haplotypeToStarAllele) {
         return getSampleMatrixHeader(haplotypeToStarAllele, "");
     }
 
 
-    public Map<String, PgxGene> getGenes(){
-        if(null == this.genes){
+    public Map<String, PgxGene> getGenes() {
+        if (null == this.genes) {
             return new TreeMap<String, PgxGene>();
-        }
-        else{
+        } else {
             return this.genes;
         }
     }

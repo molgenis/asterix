@@ -119,6 +119,21 @@ public class PgxGene {
                 '}';
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        PgxGene pgxGene = (PgxGene) o;
+
+        return name.equals(pgxGene.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return name.hashCode();
+    }
+
     public void updateSnpInfo(Snp snp) {
         if (this.getVariants().containsKey(snp.getId())) {
             Snp haplotypeSnp = this.variants.get(snp.getId());

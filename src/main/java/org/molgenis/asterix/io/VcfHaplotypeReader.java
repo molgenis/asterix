@@ -11,8 +11,9 @@ import org.molgenis.genotype.Alleles;
 import org.molgenis.genotype.Sample;
 import org.molgenis.genotype.annotation.Annotation;
 import org.molgenis.genotype.variant.GeneticVariant;
-import org.molgenis.genotype.variant.GeneticVariantMeta;
 import org.molgenis.genotype.vcf.VcfGenotypeData;
+import org.molgenis.genotype.vcf.VcfGenotypeField.VcfGenotypeFormat;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -55,6 +56,8 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         for (File phasedVcfFile : phasedVcfFiles) {
             System.out.println("Reading genotype file " + phasedVcfFile.getName());
             VcfGenotypeData genotypeData = new VcfGenotypeData(phasedVcfFile, 100, 0.0);
+            genotypeData.setPreferredGenotypeFormat(VcfGenotypeFormat.ADS, "HDS");
+
             Map<String, Annotation> variantAnnotationsMap = genotypeData.getVariantAnnotationsMap();
             processSampleIds(genotypeData);
 
@@ -87,7 +90,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         GeneticVariant matchedVariant = null;
         Alleles pgxSnpAlleles = Alleles.createBasedOnString(pgxSnp.getReferenceAllele(), pgxSnp.getVariantAllele());
         Iterable<GeneticVariant> positionalMatches = genotypeData.getVariantsByPos(Integer.toString(pgxSnp.getChr()), pgxSnp.getPos());
-        for (GeneticVariant candidateVariant :positionalMatches) {
+        for (GeneticVariant candidateVariant : positionalMatches) {
             if (candidateVariant.getVariantAlleles().sameAlleles(pgxSnpAlleles)) {
                 if (matchedVariant != null) {
                     System.out.println("pgxSnp = " + pgxSnp);
@@ -101,7 +104,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
 
     @Override
     public void readHaplotypes() throws IOException {
-
+        throw new NotImplementedException();
     }
 
     @Override
@@ -148,15 +151,16 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         //pgxSnp.setAvailable(pgxSnp.getrSquared() > R_SQUARED_CUT_OFF);
         pgxSnp.setAvailable(true);
         pgxGene.updateSnpInfo(pgxSnp);
-        //            removePgxSnpFromGene(pgxGene, pgxSnp);
+        //removePgxSnpFromGene(pgxGene, pgxSnp);
 
         Snp referenceSnp = pgxSnp.copySnp(pgxSnp);
+
         referenceSnp.setReferenceAllele(variant.getRefAllele().getAlleleAsString());
         referenceSnp.setMinorAllele(variant.getMinorAllele().getAlleleAsString());
-        referenceSnp.setVariantAllele(variant.getRefAllele().getAlleleAsString());
+        Snp alternativeSnp = referenceSnp.copySnp(referenceSnp);
 
-        Snp minorSnp = referenceSnp.copySnp(referenceSnp);
-        minorSnp.setVariantAllele(variant.getMinorAllele().getAlleleAsString());
+        referenceSnp.setVariantAllele(variant.getRefAllele().getAlleleAsString());
+        alternativeSnp.setVariantAllele(variant.getVariantAlleles().get(1).getAlleleAsString());
 
         double[][][] sampleGenotypeProbabilitiesPhased = variant.getSampleGenotypeProbabilitiesPhased();
         for (int i = 0; i < sampleGenotypeProbabilitiesPhased.length; i++) {
@@ -164,15 +168,15 @@ public class VcfHaplotypeReader implements HaplotypeReader {
             PgxSample currentSample = samples.get(currentSampleId);
 
             double[][] sample = sampleGenotypeProbabilitiesPhased[i];
-
             double probabilityReferenceAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX];
             if (probabilityReferenceAlleleHaplotype0 > 0.5) {
-                referenceSnp.setProbability(probabilityReferenceAlleleHaplotype0);
-                currentSample.getHaplotype0().put(referenceSnp.getId(), referenceSnp);
-            }
-            else {
-                minorSnp.setProbability(sample[HAPLOTYPE_0_INDEX][ALTERNATIVE_ALLELE_INDEX]);
-                currentSample.getHaplotype0().put(minorSnp.getId(), minorSnp);
+                Snp snp = referenceSnp.copySnp(referenceSnp);
+                snp.setProbability(probabilityReferenceAlleleHaplotype0);
+                currentSample.getHaplotype0().put(snp.getId(), snp);
+            } else {
+                Snp snp = alternativeSnp.copySnp(alternativeSnp);
+                snp.setProbability(sample[HAPLOTYPE_0_INDEX][ALTERNATIVE_ALLELE_INDEX]);
+                currentSample.getHaplotype0().put(snp.getId(), snp);
             }
 
             double probabilityReferenceAlleleHaplotype1 = sample[HAPLOTYPE_1_INDEX][REFERENCE_ALLELE_INDEX];
@@ -180,19 +184,18 @@ public class VcfHaplotypeReader implements HaplotypeReader {
                 Snp snp = referenceSnp.copySnp(referenceSnp);
                 snp.setProbability(probabilityReferenceAlleleHaplotype1);
                 currentSample.getHaplotype1().put(snp.getId(), snp);
-            }
-            else {
-                Snp snp = minorSnp.copySnp(minorSnp);
+            } else {
+                Snp snp = alternativeSnp.copySnp(alternativeSnp);
                 snp.setProbability(sample[HAPLOTYPE_1_INDEX][ALTERNATIVE_ALLELE_INDEX]);
-                currentSample.getHaplotype1().put(minorSnp.getId(), minorSnp);
+                currentSample.getHaplotype1().put(alternativeSnp.getId(), snp);
             }
         }
     }
 
     private boolean hasVariantsInRange(PgxGene gene, VcfGenotypeData genotypeData) {
         String chr = Integer.toString(gene.getChr());
-        int start = gene.getStartPos();
-        int end = gene.getEndPos();
+        int start = gene.getStartPos() - 1;
+        int end = gene.getEndPos() + 1;
         return genotypeData.getVariantsByRange(chr, start, end).iterator().hasNext();
     }
 

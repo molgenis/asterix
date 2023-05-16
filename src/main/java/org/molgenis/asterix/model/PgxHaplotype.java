@@ -9,10 +9,17 @@ public class PgxHaplotype {
     private Map<String, String> variantAlleles = new HashMap<>();
     private String name;
     private String function;
+    private String callAs;
 
     public PgxHaplotype(PgxGene gene, String name) {
         this.name = name;
         this.gene = gene;
+    }
+
+    public PgxHaplotype(PgxGene gene, String name, String callAs) {
+        this.name = name;
+        this.gene = gene;
+        this.callAs = callAs;
     }
 
     public Map<String, Snp> getSnps() {
@@ -30,6 +37,13 @@ public class PgxHaplotype {
         snps.putAll(this.getSnps());
 
         return snps;
+    }
+
+    public String getCorrected() {
+        if (getCallAs() != null) {
+            return getCallAs();
+        }
+        return getName();
     }
 
     public String getName() {
@@ -57,6 +71,24 @@ public class PgxHaplotype {
                 '}';
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        PgxHaplotype haplotype = (PgxHaplotype) o;
+
+        if (!gene.equals(haplotype.gene)) return false;
+        return name.equals(haplotype.name);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = gene.hashCode();
+        result = 31 * result + name.hashCode();
+        return result;
+    }
+
     public Map<String, String> getVariantAlleles() {
         return variantAlleles;
     }
@@ -75,5 +107,9 @@ public class PgxHaplotype {
 
     public boolean hasVariantAllele(String id) {
         return variantAlleles.containsKey(id);
+    }
+
+    public String getCallAs() {
+        return callAs;
     }
 }
