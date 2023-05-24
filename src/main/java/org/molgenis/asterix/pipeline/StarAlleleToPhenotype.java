@@ -398,7 +398,6 @@ public class StarAlleleToPhenotype {
         return getSampleMatrixHeader(haplotypeToStarAllele, "");
     }
 
-
     public Map<String, PgxGene> getGenes() {
         if (null == this.genes) {
             return new TreeMap<String, PgxGene>();
