@@ -10,6 +10,7 @@ public class PgxHaplotype {
     private String name;
     private String function;
     private String callAs;
+    private String disclaimer;
 
     public PgxHaplotype(PgxGene gene, String name) {
         this.name = name;
@@ -111,5 +112,13 @@ public class PgxHaplotype {
 
     public String getCallAs() {
         return callAs;
+    }
+
+    public void setDisclaimer(String disclaimer) {
+        this.disclaimer = disclaimer;
+    }
+
+    public String getDisclaimer() {
+        return disclaimer;
     }
 }

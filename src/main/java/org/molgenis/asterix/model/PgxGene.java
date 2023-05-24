@@ -12,6 +12,8 @@ public class PgxGene {
     private int startPos = Integer.MAX_VALUE;
     private int endPos = 0;
 
+    private String disclaimer;
+
     private Map<List<String>, String> functionToPredictedPhenotype = new HashMap<>();
 
     private String allele0;
@@ -105,6 +107,14 @@ public class PgxGene {
 
     public void setEndPos(int endPos) {
         this.endPos = endPos;
+    }
+
+    public String getDisclaimer() {
+        return disclaimer;
+    }
+
+    public void setDisclaimer(String disclaimer) {
+        this.disclaimer = disclaimer;
     }
 
     @Override
