@@ -9,6 +9,7 @@ import org.molgenis.asterix.model.PgxGene;
 import org.molgenis.asterix.model.PgxHaplotype;
 import org.molgenis.asterix.model.PgxSample;
 import org.molgenis.asterix.model.Snp;
+import org.molgenis.asterix.utils.ListSizeComparator;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -18,6 +19,7 @@ import java.util.*;
 
 public class HaplotypeToStarAllele {
 
+    private static final Double PROBABILITY_CUT_OFF = 0.97;
     private static String STAR_ALLELE_OUTPUT_DIR;
     private static String SNP_HAPLO_TABLE_DIR;
     private static HaplotypeReader HAPLOTYPE_READER;
@@ -48,7 +50,8 @@ public class HaplotypeToStarAllele {
             FileWriter fileWriter = new FileWriter(logFile.getAbsoluteFile());
             BufferedWriter logWriter = new BufferedWriter(fileWriter);
 
-            // Keys are the non wild-type snps, values are the samples+hap that matches the set of snps
+            // Keep track of the samples that do not match a translation.
+            // Keys are the non wild-type snps, values are the samples that matches the set of snps without a translation
             Map<Set<Snp>, List<String>> nanUniqueCombinations = new HashMap<>();
 
             PgxGene pgxGene = genes.get(key);
@@ -68,6 +71,7 @@ public class HaplotypeToStarAllele {
                 Set<Snp> snpsOnHaplotype1 = sample.getHaplotype1(pgxGene.getVariants());
 
                 for (PgxHaplotype pgxHaplotype : pgxGene.getPgxHaplotypes().values()) {
+                    if (pgxHaplotype.getSnps().isEmpty()) continue;
                     Set<Snp> snpsOnPgxHaploType = new HashSet<>(pgxHaplotype.getSnpsWithWildType().values());
 
                     if (snpsOnHaplotype0.equals(snpsOnPgxHaploType)) {
@@ -75,33 +79,33 @@ public class HaplotypeToStarAllele {
                             logWriter.write(sample.getId() + ": duplicate haplo 0 " + starAllele0 + " " + pgxHaplotype.getName() + "\n");
                             hasDuplicate = true;
                         }
-                        starAllele0 = pgxHaplotype.getName();
+                        checkProbabilities(snpsOnHaplotype0, pgxHaplotype);
+                        starAllele0 = pgxHaplotype.getCorrected();
                         sample.getGenes().get(pgxGene.getName()).setAllele0(starAllele0);
                     }
 
                     if (snpsOnHaplotype1.equals(snpsOnPgxHaploType)) {
+                        checkProbabilities(snpsOnHaplotype1, pgxHaplotype);
                         if (starAllele1 != null) {
                             logWriter.write(sample.getId() + ": duplicate haplo 1 " + starAllele1 + " " + pgxHaplotype.getName() + "\n");
                             hasDuplicate = true;
                         }
-                        starAllele1 = pgxHaplotype.getName();
+                        starAllele1 = pgxHaplotype.getCorrected();
                         sample.getGenes().get(pgxGene.getName()).setAllele1(starAllele1);
                     }
 
                     if (starAllele0 != null & starAllele1 != null) {
-                        //break; // this shouldn't happen when there are no similar entries in the translation tables
+                        //break;
                     }
                 }
 
                 if (starAllele0 == null) {
-                    sample.getGenes().get(pgxGene.getName()).setAllele0("NA");
-                    //sample.getGenes().get(pgxGene.getName()).setAllele0(pgxGene.getWildType().getName());
+                    sample.getGenes().get(pgxGene.getName()).setAllele0(pgxGene.getWildType().getName());
                     determineNaHaplotypes(nanUniqueCombinations, snpsOnHaplotype0, sample, 0);
                     naCount += 1;
                 }
                 if (starAllele1 == null) {
-                    sample.getGenes().get(pgxGene.getName()).setAllele1("NA");
-                    //sample.getGenes().get(pgxGene.getName()).setAllele1(pgxGene.getWildType().getName());
+                    sample.getGenes().get(pgxGene.getName()).setAllele1(pgxGene.getWildType().getName());
                     determineNaHaplotypes(nanUniqueCombinations, snpsOnHaplotype1, sample, 1);
                     naCount += 1;
                 }
@@ -116,41 +120,14 @@ public class HaplotypeToStarAllele {
         }
     }
 
-    private void determineNaHaplotypes(Map<Set<Snp>, List<String>> nanUniqueCombinations, Set<Snp> snps, PgxSample sample, int haplotype) {
-        Set<Snp> nonWildTypeSnps = new HashSet<>();
-        for (Snp snp : snps) {
-            if (!snp.getVariantAllele().equals(snp.getReferenceAllele())) {
-                nonWildTypeSnps.add(snp);
+    private boolean checkProbabilities(Set<Snp> snpsOnHaplotype, PgxHaplotype pgxHaplotype) {
+        for (Snp snp :snpsOnHaplotype) {
+            if (pgxHaplotype.getSnps().containsKey(snp.getId()) &
+                snp.getProbability() < PROBABILITY_CUT_OFF) {
+                return false;
             }
         }
-        String samplesHap = sample.getId() + "_hap_" + haplotype;
-        if (nanUniqueCombinations.containsKey(nonWildTypeSnps)) {
-            List<String> samples = nanUniqueCombinations.get(nonWildTypeSnps);
-            samples.add(samplesHap);
-        } else {
-            List<String> samples = new ArrayList<>();
-            samples.add(samplesHap);
-            nanUniqueCombinations.put(nonWildTypeSnps, samples);
-        }
-    }
-
-    private void logNaHaplotype(BufferedWriter logWriter, Map<Set<Snp>, List<String>> nanUniqueCombinations) throws IOException {
-        TreeMap<Set<Snp>, List<String>> sorter = new TreeMap(new ListSizeComparator(nanUniqueCombinations));
-        sorter.putAll(nanUniqueCombinations);
-
-        for (Set<Snp> snps : sorter.keySet()) {
-            logWriter.write("\nNo translation for SNPs:\n");
-            for (Snp snp : snps) {
-                logWriter.write(snp.getId() + ", reference: " + snp.getReferenceAllele() + ", variant: " + snp.getVariantAllele() + "\n");
-            }
-            List<String> sampleHaplotypes = nanUniqueCombinations.get(snps);
-            logWriter.write(sampleHaplotypes.size() + " affected samples:\n");
-            for (String sampleHaplotype : sampleHaplotypes) {
-                logWriter.write(sampleHaplotype + ", ");
-            }
-            logWriter.write("\n");
-
-        }
+        return true;
     }
 
     public void writeStarAlleles() throws IOException {
@@ -182,6 +159,43 @@ public class HaplotypeToStarAllele {
 
     public Map<String, PgxSample> getSamples() {
         return samples;
+    }
+
+    private void determineNaHaplotypes(Map<Set<Snp>, List<String>> nanUniqueCombinations, Set<Snp> snps, PgxSample sample, int haplotype) {
+        Set<Snp> nonWildTypeSnps = new HashSet<>();
+        for (Snp snp : snps) {
+            if (!snp.getVariantAllele().equals(snp.getReferenceAllele())) {
+                nonWildTypeSnps.add(snp);
+            }
+        }
+        String samplesHap = sample.getId() + "_hap_" + haplotype;
+        if (nanUniqueCombinations.containsKey(nonWildTypeSnps)) {
+            List<String> samples = nanUniqueCombinations.get(nonWildTypeSnps);
+            samples.add(samplesHap);
+        } else {
+            List<String> samples = new ArrayList<>();
+            samples.add(samplesHap);
+            nanUniqueCombinations.put(nonWildTypeSnps, samples);
+        }
+    }
+
+    private void logNaHaplotype(BufferedWriter logWriter, Map<Set<Snp>, List<String>> nanUniqueCombinations) throws IOException {
+        // Sort the output on occurrence
+        TreeMap<Set<Snp>, List<String>> sorter = new TreeMap<>(new ListSizeComparator(nanUniqueCombinations));
+        sorter.putAll(nanUniqueCombinations);
+
+        for (Set<Snp> snps : sorter.keySet()) {
+            logWriter.write("\nNo translation for SNPs:\n");
+            for (Snp snp : snps) {
+                logWriter.write(snp.getId() + ", reference: " + snp.getReferenceAllele() + ", variant: " + snp.getVariantAllele() + "\n");
+            }
+            List<String> sampleHaplotypes = nanUniqueCombinations.get(snps);
+            logWriter.write(sampleHaplotypes.size() + " affected samples:\n");
+            for (String sampleHaplotype : sampleHaplotypes) {
+                logWriter.write(sampleHaplotype + ", ");
+            }
+            logWriter.write("\n");
+        }
     }
 
     /**

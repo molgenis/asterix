@@ -17,7 +17,7 @@ dependencies {
 
 application {
     mainClass = 'org.molgenis.asterix.pipeline.AppStarter'
-    version='0.2-SNAPSHOT'
+    version='0.4-SNAPSHOT'
 }
 
 jar {

@@ -16,8 +16,8 @@ public class Pipeline {
     public void doPipeline() throws IOException {
         HaplotypeToStarAllele haplotypeToStarAllele = this.getStarAlleleFromHaploType();
         haplotypeToStarAllele.writeStarAlleles();
-        //StarAlleleToPhenotype starAlleleToPhenotype = getPhenotypeFromStarAllele(haplotypeToStarAllele);
-        //starAlleleToPhenotype.writePhenotypes(haplotypeToStarAllele);
+        StarAlleleToPhenotype starAlleleToPhenotype = getPhenotypeFromStarAllele(haplotypeToStarAllele);
+        starAlleleToPhenotype.writePhenotypes(haplotypeToStarAllele);
     }
 
     /**
