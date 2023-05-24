@@ -168,6 +168,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
             PgxSample currentSample = samples.get(currentSampleId);
 
             double[][] sample = sampleGenotypeProbabilitiesPhased[i];
+
             double probabilityReferenceAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX];
             if (probabilityReferenceAlleleHaplotype0 > 0.5) {
                 Snp snp = referenceSnp.copySnp(referenceSnp);
