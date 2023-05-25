@@ -24,7 +24,7 @@ public class SnpToHaploTableReader {
         File[] snpHaploTables = new File(haplotypeTableDir).listFiles(file -> !file.isHidden());
         for (File snpHaploTable : snpHaploTables) {
             try (BufferedReader br = new BufferedReader(new FileReader(snpHaploTable))) {
-                br.readLine();
+                String disclaimer = readDisclaimer(br);
 
                 String line = br.readLine();
 
@@ -32,13 +32,13 @@ public class SnpToHaploTableReader {
                 String geneName = splitLine[1];
 
                 PgxGene pgxGene = new PgxGene(geneName);
+                pgxGene.setDisclaimer(disclaimer);
                 String chrString = splitLine[3];
                 String[] chrList = chrString.split("\\.");
                 if (chrList.length > 1) {
                     String chr = chrList[0].split("0{4,5}")[1];
                     pgxGene.setChr(Integer.parseInt(chr));
-                }
-                else pgxGene.setChr(Integer.parseInt(chrString));
+                } else pgxGene.setChr(Integer.parseInt(chrString));
 
                 while (line != null) {
                     addSnpToHaplotype(pgxGene, line);
@@ -50,6 +50,19 @@ public class SnpToHaploTableReader {
                 genes.put(pgxGene.getName(), pgxGene);
             }
         }
+    }
+
+    private String readDisclaimer(BufferedReader br) throws IOException {
+        StringBuilder disclaimer = new StringBuilder();
+        br.readLine();
+        String line = br.readLine();
+
+        while (line.charAt(0) == '#') {
+            String[] splitLine = line.split("\"");
+            disclaimer.append(splitLine[1]);
+            line = br.readLine();
+        }
+        return disclaimer.toString();
     }
 
     private void addSnpToHaplotype(PgxGene gene, String line) {
@@ -69,7 +82,7 @@ public class SnpToHaploTableReader {
             if (!gene.getPgxHaplotypes().containsKey(callHaplotypeAs)) {
                 PgxHaplotype pgxHaplotype = new PgxHaplotype(gene, callHaplotypeAs);
                 gene.getPgxHaplotypes().put(callHaplotypeAs, pgxHaplotype);
-            };
+            }
         } else callHaplotypeAs = null;
 
         Snp snp = new Snp();
@@ -97,6 +110,7 @@ public class SnpToHaploTableReader {
         } else {
             PgxHaplotype pgxHaplotype = new PgxHaplotype(gene, haplotypeName, callHaplotypeAs);
             pgxHaplotype.addVariantAlleles(snp.getId(), snp.getVariantAllele());
+            pgxHaplotype.setDisclaimer(splitLine[9]);
             gene.getPgxHaplotypes().put(haplotypeName, pgxHaplotype);
         }
     }

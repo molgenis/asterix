@@ -19,6 +19,7 @@ public class Snp {
     private boolean isAvailable;
     private double hwePvalue;
     private Map<String, String> annotationValues;
+    private String originalCall;
 
     public int getChr() {
         return chr;
@@ -172,5 +173,13 @@ public class Snp {
 
     public double getHwe() {
         return hwePvalue;
+    }
+
+    public void setOriginalCall(String originalCall) {
+        this.originalCall = originalCall;
+    }
+
+    public String getOriginalCall() {
+        return originalCall;
     }
 }

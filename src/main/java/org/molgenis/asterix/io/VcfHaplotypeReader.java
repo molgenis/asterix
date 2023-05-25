@@ -113,18 +113,26 @@ public class VcfHaplotypeReader implements HaplotypeReader {
     }
 
     private void processSampleIds(VcfGenotypeData vcfGenotypeData) {
-        if (samples.isEmpty()) {
-            for (Sample sample : vcfGenotypeData.getSamples()) {
-                if (!samples.containsKey(sample.getId())) {
-                    samples.put(sample.getId(), new PgxSample(sample.getId()));
-                    sampleNames.add(sample.getId());
-                } else {
-                    throw new RuntimeException("Duplicate sample in genotype file");
-                }
+        sampleNames = new ArrayList<>();
+
+        for (Sample sample : vcfGenotypeData.getSamples()) {
+            sampleNames.add(sample.getId());
+            if (!samples.containsKey(sample.getId())) {
+                samples.put(sample.getId(), new PgxSample(sample.getId()));
             }
-        } else if (!isEqualSamples(vcfGenotypeData.getSamples())) {
-            throw new RuntimeException("Samples are not equal across genotype files");
         }
+//        if (samples.isEmpty()) {
+//            for (Sample sample : vcfGenotypeData.getSamples()) {
+//                if (!samples.containsKey(sample.getId())) {
+//                    samples.put(sample.getId(), new PgxSample(sample.getId()));
+//                    sampleNames.add(sample.getId());
+//                } else {
+//                    throw new RuntimeException("Duplicate sample in genotype file");
+//                }
+//            }
+//        } else if (!isEqualSamples(vcfGenotypeData.getSamples())) {
+//            throw new RuntimeException("Samples are not equal across genotype files");
+//        }
     }
 
     private void parseSnp(GeneticVariant variant, Map<String, Annotation> variantAnnotationsMap, Snp pgxSnp, PgxGene pgxGene) {
@@ -148,6 +156,10 @@ public class VcfHaplotypeReader implements HaplotypeReader {
         pgxSnp.setHwe(variant.getHwePvalue());
         pgxSnp.setMaf(variant.getMinorAlleleFrequency());
 
+        if (annotationValues.containsKey("TYPED")) pgxSnp.setType("TYPED");
+        else if (annotationValues.containsKey("IMPUTED")) pgxSnp.setType("IMPUTED");
+        else pgxSnp.setType("NA");
+
         //pgxSnp.setAvailable(pgxSnp.getrSquared() > R_SQUARED_CUT_OFF);
         pgxSnp.setAvailable(true);
         pgxGene.updateSnpInfo(pgxSnp);
@@ -168,6 +180,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
             PgxSample currentSample = samples.get(currentSampleId);
 
             double[][] sample = sampleGenotypeProbabilitiesPhased[i];
+
             double probabilityReferenceAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX];
             if (probabilityReferenceAlleleHaplotype0 > 0.5) {
                 Snp snp = referenceSnp.copySnp(referenceSnp);
@@ -204,7 +217,11 @@ public class VcfHaplotypeReader implements HaplotypeReader {
     }
 
     private boolean isEqualSamples(List<Sample> samples) {
-        return true;
+        List<String> samplesOther = new ArrayList<>();
+        for (Sample sample :samples) {
+            samplesOther.add(sample.getId());
+        }
+        return this.sampleNames.equals(samplesOther);
     }
 
     private void writeOutputFile(PgxGene pgxGene) throws IOException {

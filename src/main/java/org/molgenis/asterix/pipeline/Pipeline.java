@@ -1,5 +1,7 @@
 package org.molgenis.asterix.pipeline;
 
+import org.molgenis.asterix.io.Hl7Writer;
+
 import java.io.IOException;
 
 /**
@@ -18,6 +20,8 @@ public class Pipeline {
         haplotypeToStarAllele.writeStarAlleles();
         StarAlleleToPhenotype starAlleleToPhenotype = getPhenotypeFromStarAllele(haplotypeToStarAllele);
         starAlleleToPhenotype.writePhenotypes(haplotypeToStarAllele);
+        Hl7Writer hl7Writer = new Hl7Writer();
+        hl7Writer.writeJson();
     }
 
     /**

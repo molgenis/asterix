@@ -32,6 +32,11 @@ public class ConfigConstants {
     protected static final String OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR = "pheno_out_dir";
     protected static final String DEFAULT_PREDICTED_PHENOTYPES_OUTPUT_DIR = "predicted_phenotypes/";
 
+    //input dir conversion/mapping table snps to haplotypes
+    public static final String CYP2D6_CNV_STATUS_FILE = "CYP2D6_CNV_STATUS_FILE";
+    protected static final String OPTION_CYP2D6_CNV_STATUS_FILE = "cyp2d6_cnv_status";
+    protected static final String DEFAULT_CYP2D6_CNV_STATUS_FILE = "cnv_status.txt";
+
     //output file for sample matrix
     public static final String SAMPLE_MATRIX_OUT = "SAMPLE_MATRIX_OUT";
     protected static final String OPTION_SAMPLE_MATRIX_OUT = "sample_matrix_out";
