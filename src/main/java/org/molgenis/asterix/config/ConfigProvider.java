@@ -66,6 +66,7 @@ public class ConfigProvider {
         this.possibleCliArguments.add(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.possibleCliArguments.add(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT);
         this.possibleCliArguments.add(ConfigConstants.OPTION_SPLIT_SAMPLES_PP);
+        this.possibleCliArguments.add(ConfigConstants.OPTION_CYP2D6_CNV_STATUS_FILE);
     }
 
     /**
@@ -78,7 +79,8 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_HAPLOTYPE_DIR, true, "the directory of the haplotypes to parse");
         this.options.addOption(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, true, "the directory where the predicted phenotypes are written");
         this.options.addOption(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, true, "the output file for the sample matrix (comma separated file), or a directory if splitting by sample");
-        this.options.addOption(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, true, "whether to split the output sample matrix per sample (person");
+        this.options.addOption(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, true, "whether to split the output sample matrix per sample (person)");
+        this.options.addOption(ConfigConstants.OPTION_CYP2D6_CNV_STATUS_FILE, true, "cnv status file for CYP2D6");
         //the properties via an external file option
         this.options.addOption(ConfigConstants.OPTION_PROPERTIES_FILE, true, "set configuration via this file instead of via command line arguments");
         //the help option
@@ -96,6 +98,7 @@ public class ConfigProvider {
         this.cliOptionToName.put(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.cliOptionToName.put(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, ConfigConstants.SAMPLE_MATRIX_OUT);
         this.cliOptionToName.put(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, ConfigConstants.SPLIT_SAMPLES_PP);
+        this.cliOptionToName.put(ConfigConstants.OPTION_CYP2D6_CNV_STATUS_FILE, ConfigConstants.CYP2D6_CNV_STATUS_FILE);
     }
 
     /**
