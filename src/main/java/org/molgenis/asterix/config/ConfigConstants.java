@@ -35,7 +35,11 @@ public class ConfigConstants {
     //input dir conversion/mapping table snps to haplotypes
     public static final String CYP2D6_CNV_STATUS_FILE = "CYP2D6_CNV_STATUS_FILE";
     protected static final String OPTION_CYP2D6_CNV_STATUS_FILE = "cyp2d6_cnv_status";
-    protected static final String DEFAULT_CYP2D6_CNV_STATUS_FILE = "cnv_status.txt";
+
+    public static final String HL7_OUTPUT_FILE = "HL7_OUTPUT_FILE";
+    protected static final String OPTION_HL7_OUTPUT_FILE = "hl7_output_file";
+    public static final String HL7_INPUT_FILE = "HL7_INPUT_FILE";
+    protected static final String OPTION_HL7_INPUT_FILE = "hl7_input_file";
 
     //output file for sample matrix
     public static final String SAMPLE_MATRIX_OUT = "SAMPLE_MATRIX_OUT";

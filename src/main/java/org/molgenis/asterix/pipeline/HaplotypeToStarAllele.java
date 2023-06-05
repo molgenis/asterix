@@ -60,7 +60,7 @@ public class HaplotypeToStarAllele {
 
             for (PgxSample sample : samples.values()) {
 
-                sample.getGenes().put(pgxGene.getName(), new PgxGene(pgxGene.getName()));
+                sample.getGenes().put(pgxGene.getName(), new PgxGene(pgxGene));
 
                 String starAllele0 = null;
                 String starAllele1 = null;
@@ -85,6 +85,7 @@ public class HaplotypeToStarAllele {
                             hasDuplicate = true;
                         }
                         starAllele0 = pgxHaplotype.getCorrected();
+                        sample.getGenes().get(pgxGene.getName()).setDisclaimerSubject(pgxHaplotype.getDisclaimer());
                         sample.getGenes().get(pgxGene.getName()).setAllele0(starAllele0);
                     }
 
@@ -96,6 +97,7 @@ public class HaplotypeToStarAllele {
                             hasDuplicate = true;
                         }
                         starAllele1 = pgxHaplotype.getCorrected();
+                        sample.getGenes().get(pgxGene.getName()).setDisclaimerSubject(pgxHaplotype.getDisclaimer());
                         sample.getGenes().get(pgxGene.getName()).setAllele1(starAllele1);
                     }
 
@@ -126,7 +128,7 @@ public class HaplotypeToStarAllele {
             logLowProbSnps(logWriter, lowProbSnpsCombinations);
 
             if (pgxGene.getName().equals("CYP2D6")) {
-                Cyp2d6Caller cyp2d6Caller = new Cyp2d6Caller(samples, pgxGene);
+                new Cyp2d6Caller(samples, pgxGene);
             }
 
             logWriter.close();
@@ -212,7 +214,7 @@ public class HaplotypeToStarAllele {
                         snp.getVariantAllele() + "\n");
             }
             List<String> sampleHaplotypes = nanUniqueCombinations.get(snps);
-            logWriter.write(sampleHaplotypes.size() + " affected samples:\n");
+            logWriter.write(sampleHaplotypes.size() + " affected haplotype(s):\n");
             for (String sampleHaplotype : sampleHaplotypes) {
                 logWriter.write(sampleHaplotype + ", ");
             }
@@ -248,7 +250,7 @@ public class HaplotypeToStarAllele {
             }
             List<SnpLog> snpLogs = lowProbSnpsCombinations.get(snps);
             Collections.sort(snpLogs);
-            logWriter.write(snpLogs.size() + " affected samples:\n");
+            logWriter.write(snpLogs.size() + " affected haplotype(s):\n");
             for (SnpLog snpLog : snpLogs) {
                 logWriter.write(snpLog.getSample().getId() + "_hap_" + snpLog.getHaplotype());
                 for (Snp snp : snpLog.getSnps()) {
@@ -265,9 +267,7 @@ public class HaplotypeToStarAllele {
      * Loads the configuration
      */
     private void loadConfig() {
-        //set config provider
         ConfigProvider configProvider = ConfigProvider.getInstance();
-        //load dirs
         STAR_ALLELE_OUTPUT_DIR = configProvider.getConfigParam(ConfigConstants.STAR_ALLELE_OUTPUT_DIR);
         SNP_HAPLO_TABLE_DIR = configProvider.getConfigParam(ConfigConstants.SNP_HAPLO_TABLE_DIR);
         HAPLOTYPE_READER = new VcfHaplotypeReader(configProvider.getConfigParam(ConfigConstants.HAPLOTYPE_DIR));

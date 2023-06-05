@@ -110,9 +110,10 @@ public class StarAlleleToPhenotype {
                 if (diplotype == null) continue;
 
                 gene.setPredictedPhenotype(diplotype.getPredictedPhenotype());
+                gene.setContraindication(diplotype.getContraindication());
+                gene.setDiplotype(diplotype.getDiplotypeString());
             }
         }
-
 
     }
 
