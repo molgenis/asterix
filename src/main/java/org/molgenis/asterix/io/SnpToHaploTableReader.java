@@ -28,11 +28,25 @@ public class SnpToHaploTableReader {
 
                 String line = br.readLine();
 
+                if (line == null) throw new IllegalArgumentException("Incorrect file format for translation table: " +
+                        snpHaploTable.getName());
+
                 String[] splitLine = line.split("\t");
                 String geneName = splitLine[1];
+                String wildType = splitLine[0];
+                PgxGene pgxGene = new PgxGene(geneName, wildType);
 
-                PgxGene pgxGene = new PgxGene(geneName);
-                pgxGene.setDisclaimer(disclaimer);
+                line = br.readLine();
+
+                if (line == null) throw new IllegalArgumentException("Incorrect file format for translation table: " +
+                            snpHaploTable.getName());
+
+                splitLine = line.split("\t");
+
+                if (splitLine.length <= 9) throw new IllegalArgumentException("Incorrect column size for translation table: " +
+                        snpHaploTable.getName());
+
+                pgxGene.setDisclaimerGeneral(disclaimer);
                 String chrString = splitLine[3];
                 String[] chrList = chrString.split("\\.");
                 if (chrList.length > 1) {
@@ -110,7 +124,7 @@ public class SnpToHaploTableReader {
         } else {
             PgxHaplotype pgxHaplotype = new PgxHaplotype(gene, haplotypeName, callHaplotypeAs);
             pgxHaplotype.addVariantAlleles(snp.getId(), snp.getVariantAllele());
-            pgxHaplotype.setDisclaimer(splitLine[9]);
+            pgxHaplotype.setDisclaimer(splitLine[9].replace("\"", ""));
             gene.getPgxHaplotypes().put(haplotypeName, pgxHaplotype);
         }
     }

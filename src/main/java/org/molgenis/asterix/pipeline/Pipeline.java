@@ -4,10 +4,10 @@ import org.molgenis.asterix.io.Hl7Writer;
 
 import java.io.IOException;
 
-/**
+ /**
  * Class that contains the pipeline that needs to be gone through
  *
- * @author OelenR
+ * @author OelenR & BruggeH
  */
 public class Pipeline {
 
@@ -21,7 +21,7 @@ public class Pipeline {
         StarAlleleToPhenotype starAlleleToPhenotype = getPhenotypeFromStarAllele(haplotypeToStarAllele);
         starAlleleToPhenotype.writePhenotypes(haplotypeToStarAllele);
         Hl7Writer hl7Writer = new Hl7Writer();
-        hl7Writer.writeJson();
+        hl7Writer.writeJson(haplotypeToStarAllele.getSamples());
     }
 
     /**

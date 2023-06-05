@@ -292,9 +292,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
     }
 
     private void loadConfig() {
-        //set config provider
         ConfigProvider configProvider = ConfigProvider.getInstance();
-        //load dirs
         STAR_ALLELE_OUTPUT_DIR = configProvider.getConfigParam(ConfigConstants.STAR_ALLELE_OUTPUT_DIR);
     }
 

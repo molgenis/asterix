@@ -3,6 +3,7 @@ package org.molgenis.asterix.pipeline;
 import org.molgenis.asterix.config.ConfigConstants;
 import org.molgenis.asterix.config.ConfigProvider;
 import org.molgenis.asterix.model.PgxGene;
+import org.molgenis.asterix.model.PgxHaplotype;
 import org.molgenis.asterix.model.PgxSample;
 
 import java.io.BufferedReader;
@@ -26,6 +27,8 @@ public class Cyp2d6Caller {
     }
 
     private void readCnvStatusFile() throws IOException {
+        cyp2d6.getPgxHaplotypes().put("CYP2D6*5", new PgxHaplotype(cyp2d6, "CYP2D6*5"));
+
         File cyp2d6File = new File(CYP2D6_CNV_STATUS_FILE);
 
         if (!cyp2d6File.exists()) {

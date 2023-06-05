@@ -8,7 +8,7 @@ public class PgxSample {
     private Map<String, Snp> haplotype1;
     private String id;
 
-    private SortedMap<String, PgxGene> genes = new TreeMap<>();
+    transient private SortedMap<String, PgxGene> genes = new TreeMap<>();
 
     public PgxSample(String id) {
         this.id = id;
