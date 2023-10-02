@@ -1,5 +1,6 @@
 base:
   value: "R"
+  bed: "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/cyp2d6.bed"
 batch correction:
   pca_scaling: true
   pca_n_components: 100
