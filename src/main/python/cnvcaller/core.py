@@ -39,6 +39,7 @@ import sklearn.decomposition
 import sklearn.discriminant_analysis
 import sklearn.mixture
 import yaml
+import gzip
 
 # Metadata
 __program__ = "CNV-caller"
@@ -443,34 +444,43 @@ class FinalReportGenotypeDataReader:
         Method that reads the intensity values from a final report file.
         :return: Data frame.
         """
+        reading_mode = self.get_reading_mode()
+        print(reading_mode)
+        if reading_mode == "r":
+            with open(self._path, reading_mode) as buffer:
+                data_frame = self._read_intensity_data(buffer)
+        elif reading_mode == "rt":
+            with gzip.open(self._path, reading_mode) as buffer:
+                data_frame = self._read_intensity_data(buffer)
+        return data_frame
+    def _read_intensity_data(self, buffer):
+        part_buffer = list()
         data_frame = self._empty_dataframe()
-        with open(self._path, self.get_reading_mode()) as buffer:
-            part_buffer = list()
-            for line in buffer:
-                self._line_counter += 1
-                # The header is in key value format
-                key_match = self.new_part_pattern.match(line)
-                if key_match:
-                    print(key_match.group(0))
-                    if self._part_key is None:
-                        pass
-                    elif self._part_key == "[Header]":
-                        self.parse_header(part_buffer)
-                    else:
-                        raise NotImplementedError(
-                            "Parts other than the '[Header]' and '[Data]' part not supported"
-                        )
-                    del part_buffer[:]
-                    self._part_key = key_match.group(0)
-                    if self._part_key == "[Data]":
-                        data_frame = self._read_data(buffer)
+        for line in buffer:
+            self._line_counter += 1
+            # The header is in key value format
+            key_match = self.new_part_pattern.match(line)
+            if key_match:
+                print(key_match.group(0))
+                if self._part_key is None:
+                    pass
+                elif self._part_key == "[Header]":
+                    self.parse_header(part_buffer)
                 else:
-                    part_buffer.append(line)
+                    raise NotImplementedError(
+                        "Parts other than the '[Header]' and '[Data]' part not supported"
+                    )
+                del part_buffer[:]
+                self._part_key = key_match.group(0)
+                if self._part_key == "[Data]":
+                    data_frame = self._read_data(buffer)
+            else:
+                part_buffer.append(line)
         return data_frame
     def get_reading_mode(self):
         reading_mode = "r"
         if self._path.endswith(".gz"):
-            reading_mode = "rb"
+            reading_mode = "rt"
         return reading_mode
     def parse_header(self, part_buffer):
         pass
