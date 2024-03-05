@@ -9,6 +9,7 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.testng:testng:7.1.0'
     testImplementation 'junit:junit:4.13.2'
     implementation group: 'commons-io', name: 'commons-io', version: '2.6'
     implementation group: 'commons-cli', name: 'commons-cli', version: '1.4'
@@ -16,7 +17,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'org.molgenis.asterix.pipeline.AppStarter'
+    mainClass = 'org.molgenis.asterix.pipeline.StarAlleleChecker'
     version='0.1-SNAPSHOT'
 }
 
@@ -28,6 +29,6 @@ jar {
         }
     }
     manifest {
-        attributes 'Main-Class': 'org.molgenis.asterix.pipeline.AppStarter'
+        attributes 'Main-Class': 'org.molgenis.asterix.utils.StarAlleleChecker'
     }
 }
