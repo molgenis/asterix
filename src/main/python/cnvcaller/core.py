@@ -1483,7 +1483,8 @@ class IterativeGaussianMixture(GaussianMixture):
             X, np.exp(log_resp), self.reg_covar, self.covariance_type
         )
         exp = self.hwe_calculator.calculate_expected_frequencies(self.weights_)
-        self.weights_ *= exp
+        hwe_weights = exp / self.weights_
+        self.weights_ *= hwe_weights
         print("WEIGHTS output")
         print(self.weights_)
         self.weights_ /= self.weights_.sum()
