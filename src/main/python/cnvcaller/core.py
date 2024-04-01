@@ -856,7 +856,7 @@ class MultiDimensionalHweCalculator:
         print(dup_allele_frequency)
         print(normal_allele_frequency)
         print(exp_freq.values)
-        return exp_freq
+        return exp_freq.values
 
 
 def calculate_theta(dataframe):
