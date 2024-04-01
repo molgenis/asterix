@@ -907,7 +907,7 @@ class NaiveGenotypeClustering:
             # separate label -1.
             # We should make sure to not take these samples into account for further fitting
             orphans = (cluster_assignments == -1)
-            print("Meanshift labels:", np.unique(orphans, return_counts=True))
+            print("labels:", np.unique(cluster_assignments, return_counts=True))
             # Remove them from the cluster assignments
             cluster_assignments_filtered = cluster_assignments[~orphans]
             cluster_resp = assignments_to_resp(cluster_assignments_filtered)
@@ -942,7 +942,7 @@ class NaiveGenotypeClustering:
         angle = 90 / float(copy_number_index + 1)
         angles = [i * angle for i in range(1, copy_number_index + 1)]
         print("Angles = ", angles)
-        labels = np.digitize(theta_selected, angles, right=True)
+        labels = np.digitize(np.mean(theta_selected, axis=1), angles, right=True)
         # Get the unique labels and counts
         return labels
     def assign_genotypes(self, theta, cluster_assignments, copy_number):
