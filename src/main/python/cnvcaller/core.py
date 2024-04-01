@@ -60,7 +60,7 @@ from scipy.special import logsumexp
 from scipy.special import factorial
 from sklearn.cluster import MeanShift
 from sklearn.mixture._gaussian_mixture import _estimate_gaussian_covariances_full, _estimate_log_gaussian_prob, \
-    _compute_precision_cholesky, GaussianMixture
+    _compute_precision_cholesky, GaussianMixture, _estimate_gaussian_parameters
 from sklearn.neighbors import KNeighborsClassifier
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import pairwise_distances
@@ -796,22 +796,54 @@ class IntensityCorrection:
             ~intensity_data.isnull().any(axis=0))
 
 
-# class MultiDimensionalHweCalculator:
-#     """
-#     Class that is responsible for optimizing HWE for both a genotype dimension, a deletion and duplication dimension
-#     """
-#     def __init__(self):
-#         pass
-#
-#     def calculate_expected_frequencies(self):
-#         # Calculate p
-#         # Calculate q
-#
-#         # Calculate -1
-#         # Calculate +1
-#
-#         # Calculate +1:genotype effect
-#         # Calculate -1:genotype effect
+class MultiDimensionalHweCalculator:
+    """
+    Class that is responsible for optimizing HWE for both a genotype dimension, a deletion and duplication dimension
+    """
+    def __init__(self, cluster_genotype_map):
+        # For each cluster, determine A, B, del and dup
+        self.cluster_genotype_map = cluster_genotype_map.copy()
+        # Calculate what the Cnv dosage is for each cluster
+        self.cluster_genotype_map['Dosage'] = self.cluster_genotype_map['A'] + self.cluster_genotype_map['B']
+        # Calculate what the dosage is of a duplicated allele for each cluster
+        self.cluster_genotype_map['Excess'] = np.where(
+            self.cluster_genotype_map['Dosage'] > 2, 1, 0)
+        # Calculate what the dosage is of a deleted allele for each cluster
+        self.cluster_genotype_map['Lack'] = np.where(
+            self.cluster_genotype_map['Dosage'] < 3, 2 - self.cluster_genotype_map['Dosage'], 0)
+        # Calculate what the dosage is of a normal cnv allele (no copies or deletions)
+        self.cluster_genotype_map['Normal'] = np.where(
+            self.cluster_genotype_map['Dosage'] < 3, self.cluster_genotype_map['Dosage'], 1)
+        # Calculate for each cluster what number of permutations are possible for the combination of genotypes
+        self.cluster_genotype_map['Perm'] = (
+                factorial(self.cluster_genotype_map['Dosage']) / (
+                factorial(self.cluster_genotype_map['A']) *
+                factorial(self.cluster_genotype_map['B'])))
+    def calculate_expected_frequencies(self, resp):
+        # Get list of clusters
+        total = (resp.shape[0] * 2)
+        # Calculate a
+        a_allele_frequency = np.multiply(resp, self.cluster_genotype_map['A'].values).sum(axis=None) / total
+        # Calculate b
+        b_allele_frequency = np.multiply(resp, self.cluster_genotype_map['B'].values).sum(axis=None) / total
+        # Calculate -1
+        del_allele_frequency = np.multiply(
+            resp, self.cluster_genotype_map['Lack'].values).sum(axis=None) / total
+        # Calculate +1
+        dup_allele_frequency = np.multiply(
+            resp, self.cluster_genotype_map['Excess'].values).sum(axis=None) / total
+        # Calculate normal Cnv Dosage
+        normal_allele_frequency = np.multiply(
+            resp, self.cluster_genotype_map['Normal'].values).sum(axis=None) / total
+        # Calculate expected probabilities
+        exp_freq = (
+            np.power(a_allele_frequency, self.cluster_genotype_map['A']) *
+            np.power(b_allele_frequency, self.cluster_genotype_map['B']) *
+            np.power(del_allele_frequency, self.cluster_genotype_map['Lack']) *
+            np.power(dup_allele_frequency, self.cluster_genotype_map['Excess']) *
+            np.power(normal_allele_frequency, self.cluster_genotype_map['Normal']) *
+            self.cluster_genotype_map['Perm'])
+        return exp_freq
 
 
 def calculate_theta(dataframe):
@@ -862,8 +894,6 @@ class NaiveGenotypeClustering:
                 genotype_assignment_list.append(resp[:, copy_number_index][:,np.newaxis])
                 cluster_to_genotype_list.append(np.array([[0], [0]]))
                 continue
-            bandwidth = (90 / (copy_number_index + 1)) * (2/3)
-            print("Bandwidth = ", bandwidth)
             # Use only individuals that fit to this copy number
             # Therefore, we create a mask.
             selection_mask = (resp[:, copy_number_index] >= 0.95).astype(bool)
@@ -872,7 +902,7 @@ class NaiveGenotypeClustering:
             print(np.sum(resp[:, copy_number_index] >= 0.95))
             # Perform genotype clustering using the theta-values,
             # and a bandwidth that is suitable for the specific copy number.
-            cluster_assignments = self.genotype_clustering(theta_selected, bandwidth=bandwidth)
+            cluster_assignments = self.simple_genotype_clustering(theta_selected, copy_number_index=copy_number_index)
             # Some samples might not cluster well, and be assigned to a
             # separate label -1.
             # We should make sure to not take these samples into account for further fitting
@@ -898,13 +928,23 @@ class NaiveGenotypeClustering:
         print(cluster_resp)
         return (cluster_mapping,
                 cluster_resp)
-    def genotype_clustering(self, theta_selected, bandwidth=12):
+    def ms_genotype_clustering(self, theta_selected, copy_number_index=None, bandwidth=12):
+        if copy_number_index is not None:
+            bandwidth = (90 / float(copy_number_index + 1)) * (2/3.0)
+        print("Bandwidth = ", bandwidth)
         ms = MeanShift(bin_seeding=True, min_bin_freq=2,
                        bandwidth=bandwidth, cluster_all=True)
         values = theta_selected.values
         ms.fit(X=values)
         # Get the unique labels and counts
         return ms.labels_
+    def simple_genotype_clustering(self, theta_selected, copy_number_index=None, bandwidth=12):
+        angle = 90 / float(copy_number_index + 1)
+        angles = [i * angle for i in range(1, copy_number_index + 1)]
+        print("Angles = ", angles)
+        labels = np.digitize(theta_selected, angles, right=True)
+        # Get the unique labels and counts
+        return labels
     def assign_genotypes(self, theta, cluster_assignments, copy_number):
         # Which genotypes are possible given the copy number
         # 0 => 00
@@ -1221,7 +1261,8 @@ class SnpIntensityCnvCaller:
         resp[sample_concordances] = resp_partial
         # Using the newly identified clusters,
         # optimize fit using a gaussian mixture model.
-        mixtures = self._e_m(masked_variant_dataframe.values[sample_concordances, :], resp_partial)
+        mixtures = self._e_m(masked_variant_dataframe.values[sample_concordances, :], resp_partial,
+                             components_map = pd.DataFrame(self._components_map[variant].T, columns=["A", "B"]))
         em_resp = mixtures.predict_proba(masked_variant_dataframe.values[sample_concordances, :])
         # print(em_resp)
         # print(resp_partial)
@@ -1268,12 +1309,15 @@ class SnpIntensityCnvCaller:
         pd.DataFrame(em_resp)
         self._components_map[variant]
         # Somehow
-    def _e_m(self, values, resp):
+    def _e_m(self, values, resp, components_map):
+        # Initiate HWE calculator
+        hwe_calculator = MultiDimensionalHweCalculator(components_map)
         # Fit mixture model in this variant
         mixture_model = (
             IterativeGaussianMixture(
                 n_components=resp.shape[1],
-                resp_init=resp)
+                resp_init=resp,
+                hwe_calculator=hwe_calculator)
             .fit(values))
         return mixture_model
     def _estimate_centroids(self, values, resp):
@@ -1381,6 +1425,7 @@ class IterativeGaussianMixture(GaussianMixture):
             weights_init=None,
             means_init=None,
             precisions_init=None,
+            hwe_calculator=None,
             random_state=None,
             warm_start=False,
             verbose=0,
@@ -1403,12 +1448,34 @@ class IterativeGaussianMixture(GaussianMixture):
             verbose_interval=verbose_interval,
         )
         self.resp_init=resp_init
+        self.hwe_calculator = hwe_calculator
     def _initialize_parameters(self, X, random_state):
         """
         Initializes parameters for
         :param X:
         """
         self._initialize(X, self.resp_init)
+    def _m_step(self, X, log_resp):
+        """M step.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        log_resp : array-like of shape (n_samples, n_components)
+            Logarithm of the posterior probabilities (or responsibilities) of
+            the point of each sample in X.
+        """
+        self.weights_, self.means_, self.covariances_ = _estimate_gaussian_parameters(
+            X, np.exp(log_resp), self.reg_covar, self.covariance_type
+        )
+        exp = self.hwe_calculator.calculate_expected_frequencies(self.weights_)
+        self.weights_ *= exp
+        self.weights_ /= self.weights_.sum()
+        self.precisions_cholesky_ = _compute_precision_cholesky(
+            self.covariances_, self.covariance_type
+        )
+
 
 
 class ComplexIntensityDataset:
@@ -1982,12 +2049,12 @@ def main(argv=None):
 
         intensity_dataset = get_corrected_complex_dataset(
             a_matrix, b_matrix, corrected_intensities, intensity_matrix,
-            variants_in_locus, variant_selection_for_extended_genotyping, sample_subset)
+            variants_in_locus, variant_selection, sample_subset)
 
         intensity_dataset.write_dataset(args.out)
 
         cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp,
-                                           k_nearest_neighbours=0)
+                                           k_nearest_neighbours=k_nearest_neighbours)
         cnv_caller.fit_over_variants(intensity_dataset)
         cnv_caller.write_fit(intensity_dataset, args.out)
 
