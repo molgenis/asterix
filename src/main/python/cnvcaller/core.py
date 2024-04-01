@@ -825,7 +825,7 @@ class MultiDimensionalHweCalculator:
         # Get list of clusters
         print("Init weights")
         print(resp)
-        total = (resp.shape[1] * 2)
+        total = (resp.sum(axis=None) * 2)
         print("Total")
         print(total)
         # Calculate a
