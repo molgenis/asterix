@@ -848,7 +848,7 @@ class MultiDimensionalHweCalculator:
             np.power(del_allele_frequency, self.cluster_genotype_map['Lack']) *
             np.power(dup_allele_frequency, self.cluster_genotype_map['Excess']) *
             np.power(normal_allele_frequency, self.cluster_genotype_map['Normal']) *
-            self.cluster_genotype_map['Perm'])
+            self.cluster_genotype_map['Perm']) * resp.sum(axis=None)
         print("Expected allele frequencies")
         print(a_allele_frequency)
         print(b_allele_frequency)
