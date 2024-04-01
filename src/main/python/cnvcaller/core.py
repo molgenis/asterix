@@ -825,7 +825,7 @@ class MultiDimensionalHweCalculator:
         # Get list of clusters
         print("Init weights")
         print(resp)
-        total = (resp.shape[0] * 2)
+        total = (resp.shape[1] * 2)
         print("Total")
         print(total)
         # Calculate a
@@ -855,7 +855,7 @@ class MultiDimensionalHweCalculator:
         print(del_allele_frequency)
         print(dup_allele_frequency)
         print(normal_allele_frequency)
-        print(exp_freq)
+        print(exp_freq.values)
         return exp_freq
 
 
