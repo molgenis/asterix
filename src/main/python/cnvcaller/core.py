@@ -1205,7 +1205,7 @@ class SnpIntensityCnvCaller:
         # Naive clustering.
         sample_concordances = self.nearest_neighbour_concordance(masked_variant_dataframe, assignments)
         print(self._counts)
-        print(np.unique(assignments[sample_concordances]))
+        print(np.unique(assignments[sample_concordances], return_counts=True))
         if not np.isin(self._counts, assignments[sample_concordances]).all():
             warnings.warn("Cannot proceed with variant {}".format(variant.identifier))
             return -1
@@ -1486,23 +1486,19 @@ class CnvProbabilityCalculator:
         self.cnv_probabilities = None
         self.probabilities_processed = None
         self.path = path
-
     def filter_cnv_probabilities(self, sample_scores=None, probabilities=None):
         if sample_scores is None:
             sample_scores = pd.read_csv("{}.variant_scores.fitted.csv.gz".format(self.path))
         if probabilities is None:
             probabilities = pd.read_csv("{}.cnv_probabilities.fitted.csv.gz".format(self.path))
             probabilities = probabilities.rename(columns={"Sample ID": "Sample_ID"})
-
         # For each variant and sample combination,
         # we can get a score.
         # Here, we take every combination where the score is over 0 and assign the variable Pass
         sample_scores['Pass'] = sample_scores['score'] > 0
-
         # A and B represent dosages for allele A and B respectively,
         # Summing them gets us the CNV for each row.
         probabilities['Cnv'] = probabilities['A'] + probabilities['B']
-
         # We take the log of the probabilities for easier maths,
         # and restrict to sample variant combinations where the score is over 0.
         probabilities['Probability_Log'] = \
@@ -1510,7 +1506,6 @@ class CnvProbabilityCalculator:
         probabilities_processed = pd.merge(
             probabilities, sample_scores, on=["Sample_ID", "Variant"], how="inner")
         self.probabilities_processed = probabilities_processed[probabilities_processed['Pass']]
-
     def calculate_cnv_probabilities(self):
         # Here, we sum the probabilities for unique Cnv statusses in per variant sample combination,
         # and keep only the sample variant combination where the Cnv Probability is at least 0.95
@@ -1520,7 +1515,6 @@ class CnvProbabilityCalculator:
         cnv_per_variant_probabilities = (
             cnv_per_variant_probabilities.groupby(['Sample_ID', 'Variant'])
             .filter(lambda x: any(x['Probability'] > 0.95)))
-
         # Calculating Cnv_Probabilities_Multiplied and adjusting probabilities
         cnv_probabilities = (
             cnv_per_variant_probabilities.groupby(['Sample_ID', 'Cnv'])['Probability']
@@ -1535,7 +1529,6 @@ class CnvProbabilityCalculator:
         self.cnv_probabilities = (
             cnv_probabilities.groupby(['Sample_ID']).filter(lambda x: any(x['Cnv_Probability_Adjusted'] > 0.95)))
         return self.cnv_probabilities
-
     def calculate_reweighed_genotype_probabilities(self, cnv_probabilities=None):
         if cnv_probabilities is None:
             cnv_probabilities = self.cnv_probabilities
@@ -1551,7 +1544,6 @@ class CnvProbabilityCalculator:
             * probabilities_reweighed["Cnv_Probability_Adjusted"])
         self.probabilities_reweighed = probabilities_reweighed
         return self.probabilities_reweighed
-
     def write_oxford_gen_files(self, manifest_data_frame, probabilities_reweighed = None):
         if probabilities_reweighed is None:
             probabilities_reweighed = self.probabilities_reweighed
@@ -1560,14 +1552,11 @@ class CnvProbabilityCalculator:
             probabilities_reweighed["Cnv_Probability_Adjusted"] > 0.95)].copy()
         b_dosage["B_normalized"] = (
             (b_dosage["B"] / b_dosage["Cnv"] * 2).apply(lambda x: f"Genotypes_{x:.0f}"))
-
         b_genotypes = b_dosage.pivot_table(
             index=["Variant", "Sample_ID", "Cnv", "Cnv_Probability_Adjusted"],
             columns="B_normalized",
             values="Adjusted_Probability", fill_value=0, dropna=True).drop("Genotypes_nan", axis=1, errors="ignore")
-
         b_genotypes = b_genotypes[["Genotypes_0", "Genotypes_1", "Genotypes_2"]].div(b_genotypes.sum(axis=1), axis=0)
-
         gen_file = (
             b_genotypes.reset_index().merge(manifest_data_frame, left_on="Variant", right_on="Name")
             .pivot_table(
@@ -1576,16 +1565,17 @@ class CnvProbabilityCalculator:
                 values=["Genotypes_0", "Genotypes_1", "Genotypes_2"],
                 fill_value=0, dropna=True)
             )
+        gen_file.sort_index(level=["Chromosome", "Start"], inplace=True)
+        gen_file.sort_index(level=["Sample_ID"], inplace=True, axis=1)
         gen_file.columns.names = ["Genotypes", "Sample_ID"]
         gen_file = gen_file.reorder_levels(["Sample_ID", "Genotypes"], axis=1).sort_index(axis=1)
         samples_file = pd.DataFrame({
-            "ID_1": gen_file.columns.get_level_values("Sample_ID"),
-            "ID_2": gen_file.columns.get_level_values("Sample_ID"),
+            "ID_1": gen_file.columns.unique(level="Sample_ID"),
+            "ID_2": gen_file.columns.unique(level="Sample_ID"),
             "missing": 0, "sex": '0'})
         gen_file.columns = ['_'.join(str(col)).strip() for col in gen_file.columns.values]
-
         gen_file.to_csv("{}.reweighed_b_dosage.gen".format(self.path), sep=" ", header=False, index=True)
-        samples_file.to_csv("{}.reweighed_b_dosage.sample".format(self.path), sep=" ", header=True, index=True)
+        samples_file.to_csv("{}.reweighed_b_dosage.sample".format(self.path), sep=" ", header=True, index=False)
         self.cnv_probabilities.to_csv("{}.combined_cnv_status.txt".format(self.path), sep=" ", header=True, index=False)
 
 
@@ -1818,17 +1808,9 @@ def flatten(xs):
             yield x
 
 
-def main(argv=None):
-    if argv is None:
-        argv = sys.argv
-
-    # Process input
-    parser = ArgumentParser()
-    args = parser.parse_input(argv[1:])
-
+def read_manifest_as_data_frame(bead_pool_manifest):
     # Read the bead pool manifest file
-    manifest = IlluminaBeadArrayFiles.BeadPoolManifest(args.bead_pool_manifest)
-
+    manifest = IlluminaBeadArrayFiles.BeadPoolManifest(bead_pool_manifest)
     # Process manifest variant list
     variant_list = list()
     for variant_index in range(manifest.num_loci):
@@ -1839,15 +1821,13 @@ def main(argv=None):
             manifest.names[variant_index],
             manifest.source_strands[variant_index],
             manifest.snps[variant_index]))
-
     # Get table for the manifest
     manifest_data_frame = pd.DataFrame(
         variant_list, columns=("Chromosome", "Start", "End", "Name", "Source_Strand", "Alleles"))
-
     manifest_data_frame[['Ref', 'Alt']] = (
         manifest_data_frame['Alleles']
-            .str.split('\[(\w)/(\w)\]', expand=True)
-            .iloc[:, [1, 2]])
+        .str.split('\[(\w)/(\w)\]', expand=True)
+        .iloc[:, [1, 2]])
     manifest_data_frame[['A_Fwd', 'B_Fwd']] = manifest_data_frame[['Ref', 'Alt']]
     reverse_selection = np.logical_and(
         manifest_data_frame['Source_Strand'] == 2,
@@ -1856,6 +1836,18 @@ def main(argv=None):
         manifest_data_frame.loc[reverse_selection, 'Ref'].apply(lambda x: ALLELE_COMPLEMENTS[x])
     manifest_data_frame.loc[reverse_selection, 'B_Fwd'] = \
         manifest_data_frame.loc[reverse_selection, 'Alt'].apply(lambda x: ALLELE_COMPLEMENTS[x])
+    return manifest_data_frame
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+
+    # Process input
+    parser = ArgumentParser()
+    args = parser.parse_input(argv[1:])
+
+    manifest_data_frame = read_manifest_as_data_frame(args.bead_pool_manifest)
 
     manifest_ranges = pyranges.PyRanges(manifest_data_frame)
 
@@ -1990,12 +1982,12 @@ def main(argv=None):
 
         intensity_dataset = get_corrected_complex_dataset(
             a_matrix, b_matrix, corrected_intensities, intensity_matrix,
-            variants_in_locus, variant_selection, sample_subset)
+            variants_in_locus, variant_selection_for_extended_genotyping, sample_subset)
 
         intensity_dataset.write_dataset(args.out)
 
         cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp,
-                                           k_nearest_neighbours=k_nearest_neighbours)
+                                           k_nearest_neighbours=0)
         cnv_caller.fit_over_variants(intensity_dataset)
         cnv_caller.write_fit(intensity_dataset, args.out)
 

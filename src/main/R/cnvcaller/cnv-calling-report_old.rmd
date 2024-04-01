@@ -19,7 +19,7 @@ params:
 source(params$script)
 
 params <- list(config = "/groups/umcg-fg/tmp01/projects/pgx-passport/tools/asterix/src/main/python/cnvcaller/conf/config.yml",
-               variants = "/groups/umcg-fg/tmp01/projects/pgx-passport/results/ugli/analyses/select_corrective_variants/out.locus.bed",
+               variants = "/groups/umcg-fg/tmp01/projects/pgx-passport/results/gsamd-24v3/analyses/select_corrective_variants/out.locus.bed",
                source = list(
                  prefix = "out"))
 ```
@@ -40,9 +40,12 @@ cnv_path_prefix <- params$source$prefix
 cyp2d6loc <- read_tsv(config$base$bed,
                       col_names = c("Chrom", "Start", "End", "Name"))
 
-# Features
+# CYP2D6 bed file
+cyp2d6bb <- read_tsv("/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/crucial_backbone.bed",
+                      col_names = c("Chrom", "Start", "End", "Name"))
+
 features <- read_tsv("/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-passport-pilot/data/cyp2d6/configuration_bed_files/exons_introns_ext.bed",
-                     col_names = c("Chrom", "Start", "End", "Name")) %>%
+                    col_names = c("Chrom", "Start", "End", "Name")) %>%
   mutate(Feature = if_else(row_number() %% 2 == 0, "Exon", "Intron")) %>%
   group_by(Feature) %>%
   mutate(FeatureNumber = row_number(),
@@ -57,7 +60,16 @@ features <- read_tsv("/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-pass
 # Load variant selection
 variants <- read_tsv(params$variants,
   col_names = c("Chrom", "Start", "End", "Name")) %>%
-  mutate(Name = ordered(Name, levels = .$Name[order(.$Start)]))
+  mutate(Name = ordered(Name, levels = .$Name[order(.$Start)])) %>%
+  rowwise() %>%
+  mutate(StartDistance = min(0, Start - cyp2d6loc[1, "Start", drop = T]),
+         EndDistance = max(0, End - cyp2d6loc[1, "End", drop = T]),
+         Distance = c(StartDistance, EndDistance)[which.max(abs(c(StartDistance, EndDistance)))]) %>%
+  ungroup() %>%
+  group_by(Start, End, Chrom, Distance) %>%
+  summarise(n = n()) %>%
+  left_join(cyp2d6bb %>% select(-Name) %>% mutate(Crucial = T), by = c("Start", "End", "Chrom"))
+
 
   # Load variant selection
 variants_ugli <- read_tsv(ugli_locus,
@@ -115,16 +127,9 @@ intensities_per_type <- corrected_intensities_data_frame %>%
   inner_join(variants, by = c("variant" = "Name")) %>%
   mutate(variant = ordered(variant, levels = levels(variants$Name)))
 
-sampled_variants <- variants %>%
-  full_join(features, by = character()) %>%
-  filter(FeatureStart <= Start, FeatureEnd >= End) %>%
-  filter(!is.na(Exon)) %>% select(Name, Exon) %>%
-  group_by(Exon) %>%
-  slice_head()
-
 intensities_per_type_sampled <- intensities_per_type %>%
-  inner_join(sampled_variants, by = c("variant"="Name")) %>%
-  filter(!is.na(Exon))
+  filter(Start %in% c(42522601, 42522613, 42523805, 42523843,
+                      42523858, 42525044, 42525176, 42525772, 42526712))
 
 scales_x <- intensities_per_type_sampled %>%
   group_by(variant) %>%
@@ -262,15 +267,10 @@ for (intensities_grouped in intensities_naive_clustering %>%
 ```
 
 ```{r, echo = FALSE}
-# For each variant and sample combination, we can get a score. Here, we take every combination where the score is over 0 and assign the variable Pass
 sample_scores <- read_csv(
   "out.variant_scores.fitted.csv.gz") %>%
   mutate(Pass = score > 0)
 
-# A and B represent dosages for allele A and B respectively,
-# Summing them gets us the CNV for each row.
-
-# We take the log of the probabilities for easier maths, and restrict to sample variant combinations where the score is over 0.
 probabilities_processed <- read_csv(
   "out.cnv_probabilities.fitted.csv.gz") %>%
   rename("Sample_ID" = "Sample ID") %>%
@@ -278,44 +278,31 @@ probabilities_processed <- read_csv(
   inner_join(sample_scores, by = c("Sample_ID", "Variant")) %>%
   filter(Pass)
 
-# Here, we sum the probabilities for unique Cnv statusses in per variant sample combination,
-# and keep only the sample variant combination where the Cnv Probability is at least 0.95
 cnv_per_variant_probabilities <- probabilities_processed %>%
   group_by(Sample_ID, Variant, Cnv) %>%
   summarise(Cnv_Probability = sum(Probability)) %>%
   group_by(Sample_ID, Variant) %>%
   filter(any(Cnv_Probability > 0.95))
 
-# # For every variant sample combination,
-# # get the row corresponding to the Cnv with the highest probability
-# probabilities_raw <- cnv_per_variant_probabilities %>%
-#   group_by(Sample_ID, Variant) %>%
-#   slice_max(Cnv_Probability) %>%
-#   inner_join(variants, by = c("Variant" = "Name"))
+probabilities_raw <- cnv_per_variant_probabilities %>%
+  group_by(Sample_ID, Variant) %>%
+  slice_max(Cnv_Probability) %>%
+  inner_join(curated_gsa_v3, by = c("Variant" = "Name"))
 
-# Attempt to correct the Cnv probability, assuming there is only one true Cnv status for every sample.
-# We do this through combining the probability across each Cnv status for every Sample,
+cnv_per_variant_dosages <- probabilities_raw %>%
+  inner_join(cnv_probabilities %>% group_by(Sample_ID) %>% slice_max(Cnv_Probability_Adjusted), by = c("Sample_ID"), suffix = c("_Overall", "_Variant")) %>%
+  arrange(Start) %>%
+  mutate(Cnv_Difference = Cnv_Variant - Cnv_Overall)
 
-# Hereafter, calculate the Sum of the combined Cnv probabilities,
-# and correct individual Cnv probabilities per sample for the combined sum.
 cnv_probabilities <- cnv_per_variant_probabilities %>%
   group_by(Sample_ID, Cnv) %>%
   summarise(
-    Cnv_Probabilities_Multiplied = sum(log(Cnv_Probability), na.rm=T)) %>%
+    Cnv_Probabilities_Summed = log(sum(Cnv_Probability, na.rm=T))) %>%
   group_by(Sample_ID) %>%
   mutate(
-    Cnv_Probability_Total = log(sum(exp(Cnv_Probabilities_Multiplied), na.rm=T)),
-    Cnv_Probability_Adjusted = exp(Cnv_Probabilities_Multiplied - Cnv_Probability_Total))
+    Cnv_Probability_Total = log(sum(exp(Cnv_Probabilities_Summed), na.rm=T)),
+    Cnv_Probability_Adjusted = exp(Cnv_Probabilities_Summed - Cnv_Probability_Total))
 
-# # Combine the overall probabilities per Cnv Sample combo with probabilities per Cnv Sample Variant Combo
-# # to calculate the relative cnv dosage per variant
-# cnv_per_variant_dosages <- probabilities_raw %>%
-#   inner_join(cnv_probabilities %>% group_by(Sample_ID) %>% slice_max(Cnv_Probability_Adjusted), by = c("Sample_ID"), suffix = c("_Overall", "_Variant")) %>%
-#   arrange(Start) %>%
-#   mutate(Cnv_Difference = Cnv_Variant - Cnv_Overall)
-
-# For every variant * cnv * sample combination, calculate the adjusted probability for each cnv status
-# given the expected cnv as calculated over all variants.
 probabilities_adjusted <- cnv_probabilities %>%
   ungroup() %>%
   inner_join(
@@ -433,67 +420,5 @@ probabilities_plot <- cnv_probabilities %>%
 
 plot_to_pdf(probabilities_plot, file.path(".", sprintf(
   "out.probabilities.%s.pdf", format(Sys.Date(), "%Y%m%d"))), width = 4, height = 4)
-
-```
-
-```{r, echo = FALSE}
-
-cnv_data <- "/groups/umcg-fg/tmp01/projects/pgx-passport/data/medicatie-op-maat/cnv-data.tsv"
-
-cnv_real_test <- read_tsv(cnv_data)
-
-cnv_matched <- cnv_probabilities %>% inner_join(cnv_real_test, by = c("Sample_ID" = "SampleID_GSA"))
-
-mismatched_samples <- cnv_matched %>% group_by(Sample_ID) %>% slice_max(Cnv_Probability_Adjusted) %>% mutate(all_match = all(Cnv == `CNV intron 2`, Cnv == `CNV intron 6`, Cnv == `CNV exon 9`)) %>% filter(!all_match | Cnv_Probability_Adjusted < 0.95)
-
-mismatch_overview <- probabilities_adjusted %>%
-  select(Sample_ID, Variant, Cnv, Cnv_Variant_Probability) %>%
-  inner_join(mismatched_samples, by = "Sample_ID", suffix = c("_local", "_overall")) %>%
-  inner_join(variants, by = c("Variant" = "Name")) %>%
-  group_by(Sample_ID, Variant, Cnv_local) %>% slice_max(Cnv_Variant_Probability, with_ties=F) %>% arrange(Sample_ID, Cnv_local, Start)
-
-fitted_intensities <- intensities_per_type %>%
-  filter(corrected == "corrected") %>%
-  inner_join(probabilities_raw, by=c("Sample_ID"="Sample_ID", "Start"="Start")) %>%
-  group_by(Start) %>%
-  arrange(desc(Cnv_Probability)) %>%
-  group_split() %>%
-  group_map(~ mutate(.x, variant = fct_drop(variant)))
-
-for (intensities_grouped in fitted_intensities) {
-  print(intensities_grouped)
-
-  scales_x <- intensities_grouped %>%
-    group_by(variant) %>%
-    group_map(~ scale_x_continuous(limits = c(
-      min(unlist(.x[c("X", "Y")]), na.rm = TRUE),
-      max(unlist(.x[c("X", "Y")]), na.rm = TRUE)))) %>%
-    setNames(unique(sort(intensities_grouped$variant)))
-
-  scales_y <- intensities_grouped %>%
-    group_by(variant) %>%
-    group_map(~ scale_y_continuous(limits = c(
-      min(unlist(.x[c("X", "Y")]), na.rm = TRUE),
-      max(unlist(.x[c("X", "Y")]), na.rm = TRUE)))) %>%
-    setNames(unique(sort(intensities_grouped$variant)))
-
-  # Create plot
-  fit_plot <- ggplot(intensities_grouped, aes(x=X, y=Y)) +
-    rasterize(geom_point(
-      alpha = 0.2, size = 1, shape = 16,
-      aes(fill = Cnv, stroke = Cnv_Probability < 0.95)), dpi = 300) +
-    scale_discrete_manual(aesthetics = "stroke", values=c(0, 0.5)) +
-    scale_fill_viridis_c(option = "viridis", limits = c(0, 3),
-                         name = "Dosage", na.value = "grey50") +
-    facet_wrap2(~ variant, ncol = 4, nrow = 4, trim_blank = FALSE) +
-    facetted_pos_scales(y = scales_y, x = scales_x) +
-    coord_fixed() +
-    theme(legend.position = "bottom", strip.text.x = element_text(size = 6), ,
-          aspect.ratio = 1)
-
-  plot_to_pdf(fit_plot, file.path(".", sprintf(
-    "out.fit.%s.%s.pdf", head(intensities_grouped$Start, 1), format(Sys.Date(), "%Y%m%d"))), width = 8, height = 8)
-
-}
 
 ```
