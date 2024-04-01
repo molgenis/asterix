@@ -803,6 +803,7 @@ class MultiDimensionalHweCalculator:
     def __init__(self, cluster_genotype_map):
         # For each cluster, determine A, B, del and dup
         self.cluster_genotype_map = cluster_genotype_map.copy()
+        print(self.cluster_genotype_map)
         # Calculate what the Cnv dosage is for each cluster
         self.cluster_genotype_map['Dosage'] = self.cluster_genotype_map['A'] + self.cluster_genotype_map['B']
         # Calculate what the dosage is of a duplicated allele for each cluster
@@ -819,9 +820,14 @@ class MultiDimensionalHweCalculator:
                 factorial(self.cluster_genotype_map['Dosage']) / (
                 factorial(self.cluster_genotype_map['A']) *
                 factorial(self.cluster_genotype_map['B'])))
+        print(self.cluster_genotype_map)
     def calculate_expected_frequencies(self, resp):
         # Get list of clusters
+        print("Init weights")
+        print(resp)
         total = (resp.shape[0] * 2)
+        print("Total")
+        print(total)
         # Calculate a
         a_allele_frequency = np.multiply(resp, self.cluster_genotype_map['A'].values).sum(axis=None) / total
         # Calculate b
@@ -843,6 +849,13 @@ class MultiDimensionalHweCalculator:
             np.power(dup_allele_frequency, self.cluster_genotype_map['Excess']) *
             np.power(normal_allele_frequency, self.cluster_genotype_map['Normal']) *
             self.cluster_genotype_map['Perm'])
+        print("Expected allele frequencies")
+        print(a_allele_frequency)
+        print(b_allele_frequency)
+        print(del_allele_frequency)
+        print(dup_allele_frequency)
+        print(normal_allele_frequency)
+        print(exp_freq)
         return exp_freq
 
 
@@ -1471,6 +1484,8 @@ class IterativeGaussianMixture(GaussianMixture):
         )
         exp = self.hwe_calculator.calculate_expected_frequencies(self.weights_)
         self.weights_ *= exp
+        print("WEIGHTS output")
+        print(self.weights_)
         self.weights_ /= self.weights_.sum()
         self.precisions_cholesky_ = _compute_precision_cholesky(
             self.covariances_, self.covariance_type
