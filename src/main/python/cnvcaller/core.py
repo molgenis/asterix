@@ -1597,11 +1597,14 @@ class CnvProbabilityCalculator:
             .sum().reset_index())
         cnv_per_variant_probabilities = (
             cnv_per_variant_probabilities.groupby(['Sample_ID', 'Variant'])
-            .filter(lambda x: any(x['Probability'] > 0.95)))
+            .filter(lambda x: any(x['Probability'] > 0.97)))
         # Calculating Cnv_Probabilities_Multiplied and adjusting probabilities
+        # We are essentially averaging probabilities over all SNPs here.
+        # Multiplying them almost always gives a probability of 1,
+        # while we want to be very cautious with samples that have some deviating cnv calls.
         cnv_probabilities = (
             cnv_per_variant_probabilities.groupby(['Sample_ID', 'Cnv'])['Probability']
-            .aggregate(lambda p: np.sum(np.log(p + np.finfo(float).eps), axis=0)).reset_index())
+            .aggregate(lambda p: np.log(np.sum(p, axis=0) + np.finfo(float).eps)).reset_index())
         cnv_probabilities['Cnv_Probability_Total'] = (
             cnv_probabilities
             .groupby(['Sample_ID'])['Probability']
@@ -1632,7 +1635,7 @@ class CnvProbabilityCalculator:
             probabilities_reweighed = self.probabilities_reweighed
         b_dosage = probabilities_reweighed.loc[
             np.logical_and(probabilities_reweighed["Cnv"] <= 2,
-            probabilities_reweighed["Cnv_Probability_Adjusted"] > 0.95)].copy()
+            probabilities_reweighed["Cnv_Probability_Adjusted"] > 0.97)].copy()
         b_dosage["B_normalized"] = (
             (b_dosage["B"] / b_dosage["Cnv"] * 2).apply(lambda x: f"Genotypes_{x:.0f}"))
         b_genotypes = b_dosage.pivot_table(
