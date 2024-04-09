@@ -1906,17 +1906,18 @@ def read_manifest_as_data_frame(bead_pool_manifest):
             manifest.map_infos[variant_index],
             manifest.names[variant_index],
             manifest.source_strands[variant_index],
+            manifest.ref_strands[variant_index],
             manifest.snps[variant_index]))
     # Get table for the manifest
     manifest_data_frame = pd.DataFrame(
-        variant_list, columns=("Chromosome", "Start", "End", "Name", "Source_Strand", "Alleles"))
+        variant_list, columns=("Chromosome", "Start", "End", "Name", "Source_Strand", "Ref_Strand", "Alleles"))
     manifest_data_frame[['Ref', 'Alt']] = (
         manifest_data_frame['Alleles']
         .str.split('\[(\w)/(\w)\]', expand=True)
         .iloc[:, [1, 2]])
     manifest_data_frame[['A_Fwd', 'B_Fwd']] = manifest_data_frame[['Ref', 'Alt']]
     reverse_selection = np.logical_and(
-        manifest_data_frame['Source_Strand'] == 2,
+        manifest_data_frame['Ref_Strand'] == 2,
         ~manifest_data_frame['A_Fwd'].isin(["I", "D"]))
     manifest_data_frame.loc[reverse_selection, 'A_Fwd'] = \
         manifest_data_frame.loc[reverse_selection, 'Ref'].apply(lambda x: ALLELE_COMPLEMENTS[x])
