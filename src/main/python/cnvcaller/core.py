@@ -1613,7 +1613,7 @@ class CnvProbabilityCalculator:
             np.exp(cnv_probabilities['Probability'] - cnv_probabilities['Cnv_Probability_Total']))
         cnv_probabilities = cnv_probabilities.drop(['Probability', 'Cnv_Probability_Total'], axis=1)
         self.cnv_probabilities = (
-            cnv_probabilities.groupby(['Sample_ID']).filter(lambda x: any(x['Cnv_Probability_Adjusted'] > 0.95)))
+            cnv_probabilities.groupby(['Sample_ID']))
         return self.cnv_probabilities
     def calculate_reweighed_genotype_probabilities(self, cnv_probabilities=None):
         if cnv_probabilities is None:
@@ -1656,9 +1656,10 @@ class CnvProbabilityCalculator:
         gen_file.columns.names = ["Genotypes", "Sample_ID"]
         gen_file = gen_file.reorder_levels(["Sample_ID", "Genotypes"], axis=1).sort_index(axis=1)
         samples_file = pd.DataFrame({
-            "ID_1": gen_file.columns.unique(level="Sample_ID"),
-            "ID_2": gen_file.columns.unique(level="Sample_ID"),
-            "missing": 0, "sex": '0'})
+            "ID_1": pd.concat([pd.Series([0]), gen_file.columns.unique(level="Sample_ID").to_series()]).reset_index(drop=True),
+            "ID_2": pd.concat([pd.Series([0]), gen_file.columns.unique(level="Sample_ID").to_series()]).reset_index(drop=True),
+            "missing": pd.concat([pd.Series(['0']), pd.Series(['0' for i in range(len(gen_file.columns.unique(level="Sample_ID")))])]).reset_index(drop=True),
+            "sex": pd.concat([pd.Series(['D']), pd.Series(['0' for i in range(len(gen_file.columns.unique(level="Sample_ID")))])]).reset_index(drop=True)})
         gen_file.columns = ['_'.join(str(col)).strip() for col in gen_file.columns.values]
         gen_file.to_csv("{}.reweighed_b_dosage.gen".format(self.path), sep=" ", header=False, index=True)
         samples_file.to_csv("{}.reweighed_b_dosage.sample".format(self.path), sep=" ", header=True, index=False)
