@@ -9,19 +9,17 @@ library(ggrastr)
 library(ggh4x)
 library(extrafont)
 
-loadNamespace("MASS")
-
 # Declare constants
 loadfonts()
-old <- theme_set(theme_classic())
+old <- theme_set(theme_classic(base_size = 10))
 theme_update(
   line = element_line(
     colour = "black", size = (0.5 / (ggplot2::.pt * 72.27/96)),
     linetype = 1, lineend = "butt", arrow = F, inherit.blank = T),
   strip.background = element_rect(colour = NA, fill = NA),
   panel.grid.minor = element_blank(),
-  text = element_text(family="Lato"),
-  title = element_text(colour = "#595A5C", face = "bold")
+  text = element_text(family="Helvetica"),
+  title = element_text(colour = "#595A5C", face = "bold"),
 )
 
 caw_color_vector <- c(
