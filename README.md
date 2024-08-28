@@ -63,9 +63,9 @@ The PGx-pipeline repository encapsulates a series of scripts and a Nextflow pipe
 
 ## Steps
 
-1. Create a combined samplesheet with GDIO samples and the samples of the dataset to be analyzed:
+1. Create a combined samplesheet with background/reference samples and the samples of the dataset to be analyzed. Both need to be genotyped on the same genotyping chip:
 
-2. Create a directory and link the folders with each of the SentrixBarcodes with .idat or .gtc files from a background/reference dataset and the dataset to be analyzed. Both need to be genotyped on the same genotyping chip
+2. Create a directory and link the folders with each of the SentrixBarcodes with .idat or .gtc files from a background/reference dataset and the dataset to be analyzed.
 
 3. If .idat files are used, convert all .idat files to .gtc files.
 
