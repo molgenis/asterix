@@ -65,7 +65,7 @@ The PGx-pipeline repository encapsulates a series of scripts and a Nextflow pipe
 
 1. Create a combined samplesheet with GDIO samples and the samples of the dataset to be analyzed:
 
-2. Create a directory and link the folders with each of the SentrixBarcodes with .idat or .gtc files from the GDIO dataset and the dataset to be analyzed.
+2. Create a directory and link the folders with each of the SentrixBarcodes with .idat or .gtc files from a background/reference dataset and the dataset to be analyzed. Both need to be genotyped on the same genotyping chip
 
 3. If .idat files are used, convert all .idat files to .gtc files.
 
@@ -80,14 +80,12 @@ The PGx-pipeline repository encapsulates a series of scripts and a Nextflow pipe
      bash PGx-pipeline/workflow/gtc_to_final_report.submit.sh -p <parameters_file>
      ```
 
-   **Comment:** The GAP pipeline also generates final report files. Unfortunately, the GAP pipeline currently creates a gigantic final report file. Since the step of processing final report files to Python pickle files is now written to process one final report file per slide, I have chosen to include this step in this workflow.
+   **Comment:** The GAP pipeline also generates final report files, and automatically combines these into one large final report file. Since the step of processing final report files to Python pickle files is now written to process one final report file per slide, this step is included in this workflow as well.
 
    - Filter variants and samples:
      ```sh
      bash PGx-pipeline/workflow/quality_control.submit.sh -p <parameters_file>
      ```
-
-   **Comment:** The protocol currently used for this step only filters variants based on the variants we previously could type well with GSAMD-24v3. Sample QC still needs to be implemented. Due to an issue with the Oxford .gen/.sample files, I have not been able to test this new step.
 
    - Merge chromosomes into one binary plink dataset:
      ```sh
