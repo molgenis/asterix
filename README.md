@@ -2,10 +2,20 @@
 
 ## Overview
 
-The Asterix project is designed to facilitate pharmacogenetic (PGx) analysis by converting individual genetic variants into medication-level advice using translation tables. The project comprises two main repositories:
+The Asterix project is designed to facilitate pharmacogenetic (PGx) analysis by converting individual genetic variants into medication-level advice using translation tables.
 
-- Asterix
-- PGx-pipeline
+## Pharmacogenetic Data Analysis
+
+Pharmacogenetic data analysis is performed using a series of scripts and an imputation pipeline. These are initiated using a parameter file. The workflow starts with filtering genetic data for reliably typed variants and samples that meet certain quality criteria. Next, CNV determination is performed for the CYP2D6 gene, the typed data is statistically imputed based on reference datasets, and genotypes at the variant level are translated to haplotype-level genotypes per gene (star alleles) using predefined tables. Finally, genotypes per gene are translated to a predicted phenotype per gene and per medication using predefined tables.
+
+## Data Analysis
+
+The data analysis uses the following GitHub repositories:
+
+- [PGx-pipeline](https://github.com/molgenis/PGx-pipeline) for overall data analysis. 
+- [Asterix](https://github.com/molgenis/asterix) for CNV determination in CYP2D6 and translating and logging genotyped variants to predicted phenotypes.
+- [GAP](https://github.com/molgenis/GAP-QC) for processing data from raw .idat files to final report files and Oxford .gen and .sample files.
+
 
 ## Repositories
 
@@ -31,15 +41,16 @@ The PGx-pipeline repository encapsulates a series of scripts and a Nextflow pipe
 - **scripts**: Various scripts for processing and analysis.
 - **templates**: Template files for configuration and reporting.
 - **workflow**: Scripts for starting jobs and the nextflow pipeline.
-- **parameters_pgx_pipeline.csv**: Default configuration parameters for the pipeline.
+- **parameters_template.sh**: Template parameter file for the pipeline.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Java 8 or higher
-- Python 3.6 or higher
-- R 4.0 or higher
+- Python (tested with 3.9)
+- R (tested with 4.0.3)
+- PLINK (both 1.9 and 2.0)
 - Maven
 - Nextflow
 
@@ -49,20 +60,6 @@ The PGx-pipeline repository encapsulates a series of scripts and a Nextflow pipe
    ```sh
    git clone https://github.com/molgenis/asterix.git
    git clone https://github.com/molgenis/PGx-pipeline.git
-
-## Pharmacogenetic Data Analysis
-
-Pharmacogenetic data analysis is performed using a series of scripts and an imputation pipeline. These are initiated using a parameter file. The workflow starts with filtering genetic data for reliably typed variants and samples that meet certain quality criteria. Next, CNV determination is performed for the CYP2D6 gene, the typed data is statistically imputed based on reference datasets, and genotypes at the variant level are translated to haplotype-level genotypes per gene (star alleles) using predefined tables. Finally, genotypes per gene are translated to a predicted phenotype per gene and per medication using predefined tables.
-
-**Comment:** Applying the PGx pipeline to screen individual GSA slides instead of an entire dataset of several thousand samples is still new. It is unlikely to run without issues.
-
-## Data Analysis
-
-The data analysis uses the following GitHub repositories:
-
-- PGx-pipeline for overall data analysis. Location on Gearshift: `/groups/umcg-fg/tmp01/projects/pgx-passport/tools/PGx-pipeline`
-- Asterix for CNV determination in CYP2D6 and translating and logging genotyped variants to predicted phenotypes. Location on Gearshift: `/groups/umcg-fg/tmp01/projects/pgx-passport/tools/asterix`
-- GAP for processing data from raw .idat files to final report files and Oxford .gen and .sample files.
 
 ## Steps
 
