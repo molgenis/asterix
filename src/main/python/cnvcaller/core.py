@@ -1442,7 +1442,8 @@ class IterativeGaussianMixture(GaussianMixture):
             random_state=None,
             warm_start=False,
             verbose=0,
-            verbose_interval=10
+            verbose_interval=10,
+            alpha=0.5
     ):
         super().__init__(
             n_components=n_components,
@@ -1462,6 +1463,7 @@ class IterativeGaussianMixture(GaussianMixture):
         )
         self.resp_init=resp_init
         self.hwe_calculator = hwe_calculator
+        self.alpha = alpha
     def _initialize_parameters(self, X, random_state):
         """
         Initializes parameters for
@@ -1483,7 +1485,7 @@ class IterativeGaussianMixture(GaussianMixture):
             X, np.exp(log_resp), self.reg_covar, self.covariance_type
         )
         exp = self.hwe_calculator.calculate_expected_frequencies(self.weights_)
-        hwe_weights = exp / self.weights_
+        hwe_weights = exp / self.weights_ * self.alpha
         self.weights_ *= hwe_weights
         print("WEIGHTS output")
         print(self.weights_)
@@ -1612,8 +1614,8 @@ class CnvProbabilityCalculator:
         cnv_probabilities['Cnv_Probability_Adjusted'] = (
             np.exp(cnv_probabilities['Probability'] - cnv_probabilities['Cnv_Probability_Total']))
         cnv_probabilities = cnv_probabilities.drop(['Probability', 'Cnv_Probability_Total'], axis=1)
-        self.cnv_probabilities = (
-            cnv_probabilities.groupby(['Sample_ID']))
+        self.cnv_per_variant_probabilities = cnv_per_variant_probabilities
+        self.cnv_probabilities = cnv_probabilities
         return self.cnv_probabilities
     def calculate_reweighed_genotype_probabilities(self, cnv_probabilities=None):
         if cnv_probabilities is None:
@@ -1664,6 +1666,7 @@ class CnvProbabilityCalculator:
         gen_file.to_csv("{}.reweighed_b_dosage.gen".format(self.path), sep=" ", header=False, index=True)
         samples_file.to_csv("{}.reweighed_b_dosage.sample".format(self.path), sep=" ", header=True, index=False)
         self.cnv_probabilities.to_csv("{}.combined_cnv_status.txt".format(self.path), sep=" ", header=True, index=False)
+        self.cnv_per_variant_probabilities.to_csv("{}.cnv_status_per_variant.txt".format(self.path), sep=" ", header=True, index=False)
 
 
 
