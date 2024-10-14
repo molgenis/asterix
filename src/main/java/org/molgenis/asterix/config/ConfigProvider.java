@@ -66,6 +66,9 @@ public class ConfigProvider {
         this.possibleCliArguments.add(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.possibleCliArguments.add(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT);
         this.possibleCliArguments.add(ConfigConstants.OPTION_SPLIT_SAMPLES_PP);
+        this.possibleCliArguments.add(ConfigConstants.OPTION_CYP2D6_CNV_STATUS_FILE);
+        this.possibleCliArguments.add(ConfigConstants.OPTION_HL7_OUTPUT_FILE);
+        this.possibleCliArguments.add(ConfigConstants.OPTION_HL7_INPUT_FILE);
     }
 
     /**
@@ -78,7 +81,10 @@ public class ConfigProvider {
         this.options.addOption(ConfigConstants.OPTION_HAPLOTYPE_DIR, true, "the directory of the haplotypes to parse");
         this.options.addOption(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, true, "the directory where the predicted phenotypes are written");
         this.options.addOption(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, true, "the output file for the sample matrix (comma separated file), or a directory if splitting by sample");
-        this.options.addOption(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, true, "whether to split the output sample matrix per sample (person");
+        this.options.addOption(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, true, "whether to split the output sample matrix per sample (person)");
+        this.options.addOption(ConfigConstants.OPTION_CYP2D6_CNV_STATUS_FILE, true, "cnv status file for CYP2D6");
+        this.options.addOption(ConfigConstants.OPTION_HL7_OUTPUT_FILE, true, "HL7 output file");
+        this.options.addOption(ConfigConstants.OPTION_HL7_INPUT_FILE, true, "HL7 input file");
         //the properties via an external file option
         this.options.addOption(ConfigConstants.OPTION_PROPERTIES_FILE, true, "set configuration via this file instead of via command line arguments");
         //the help option
@@ -96,6 +102,9 @@ public class ConfigProvider {
         this.cliOptionToName.put(ConfigConstants.OPTION_PREDICTED_PHENOTYPES_OUTPUT_DIR, ConfigConstants.PREDICTED_PHENOTYPES_OUTPUT_DIR);
         this.cliOptionToName.put(ConfigConstants.OPTION_SAMPLE_MATRIX_OUT, ConfigConstants.SAMPLE_MATRIX_OUT);
         this.cliOptionToName.put(ConfigConstants.OPTION_SPLIT_SAMPLES_PP, ConfigConstants.SPLIT_SAMPLES_PP);
+        this.cliOptionToName.put(ConfigConstants.OPTION_CYP2D6_CNV_STATUS_FILE, ConfigConstants.CYP2D6_CNV_STATUS_FILE);
+        this.cliOptionToName.put(ConfigConstants.OPTION_HL7_OUTPUT_FILE, ConfigConstants.HL7_OUTPUT_FILE);
+        this.cliOptionToName.put(ConfigConstants.OPTION_HL7_INPUT_FILE, ConfigConstants.HL7_INPUT_FILE);
     }
 
     /**
@@ -174,21 +183,9 @@ public class ConfigProvider {
         this.helpFormatter.printHelp("org/molgenis/asterix", this.options);
     }
 
-    /*
-    following method \/ uses .properties file that would/can contain the following
-
-    STAR_ALLELE_OUTPUT_DIR=C:\\molgenis\\asterix_data\\star_alleles\\
-    SNP_HAPLO_TABLE_DIR=C:\\molgenis\\asterix_data\\snp_to_haplo\\
-    HAPLOTYPE_DIR=C:\\molgenis\\asterix_data\\ll_phased_active\\
-    HAPLO_PHENO_TABLE_DIR=C:\\molgenis\\asterix_data\\haplo_to_pheno\\
-    PREDICTED_PHENOTYPES_OUTPUT_DIR=C:\\molgenis\\asterix_data\\predicted_phenotypes\\
-    SAMPLE_MATRIX_OUT=C:\\molgenis\\asterix_data\\sample_matrix.csv
-    SPLIT_SAMPLES_PP=false
-
-     */
-
     /**
      * load config from a .properties file
+     *
      * @param pathToFile the path to the .properties file
      */
     private void loadExternalPropertiesFile(String pathToFile){

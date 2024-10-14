@@ -12,15 +12,32 @@ public class PgxGene {
     private int startPos = Integer.MAX_VALUE;
     private int endPos = 0;
 
+    private String disclaimerGeneral;
+    private String disclaimerSubject;
+
     private Map<List<String>, String> functionToPredictedPhenotype = new HashMap<>();
 
     private String allele0;
     private String allele1;
     private String predictedPhenotype;
+    private String contraindication;
+    private String diplotype;
 
     public PgxGene(String name) {
         this.name = name;
         this.wildType = new PgxHaplotype(this, name + "*1");
+    }
+
+    public PgxGene(String name, String wildType) {
+        this.name = name;
+        this.wildType = new PgxHaplotype(this, wildType);
+        String naHaplotype = name + "NA";
+        getPgxHaplotypes().put(naHaplotype, new PgxHaplotype(this, naHaplotype));
+    }
+
+    public PgxGene(PgxGene other) {
+        this.name = other.name;
+        this.disclaimerGeneral = other.disclaimerGeneral;
     }
 
     public void getDeterminableAlleles() {
@@ -107,6 +124,49 @@ public class PgxGene {
         this.endPos = endPos;
     }
 
+    public String getDisclaimerGeneral() {
+        return disclaimerGeneral;
+    }
+
+    public void setDisclaimerGeneral(String disclaimerGeneral) {
+        this.disclaimerGeneral = disclaimerGeneral;
+    }
+
+    public String getDisclaimerSubject() {
+        return disclaimerSubject;
+    }
+
+    public void setDisclaimerSubject(String disclaimerSubject) {
+        if (disclaimerSubject != null) {
+            if (this.disclaimerSubject == null | disclaimerSubject.equals(this.disclaimerSubject)) {
+                this.disclaimerSubject = disclaimerSubject;
+            }
+            else {
+                this.disclaimerSubject += "\n" + disclaimerSubject;
+            }
+        }
+    }
+
+    public void setVariants(Map<String, Snp> variants) {
+        this.variants = variants;
+    }
+
+    public String getContraindication() {
+        return contraindication;
+    }
+
+    public void setContraindication(String contraindication) {
+        this.contraindication = contraindication;
+    }
+
+    public String getDiplotype() {
+        return diplotype;
+    }
+
+    public void setDiplotype(String diplotype) {
+        this.diplotype = diplotype;
+    }
+
     @Override
     public String toString() {
         return "PgxGene{" +
@@ -117,6 +177,21 @@ public class PgxGene {
                 ", allele1='" + allele1 + '\'' +
                 ", predictedPhenotype='" + predictedPhenotype + '\'' +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        PgxGene pgxGene = (PgxGene) o;
+
+        return name.equals(pgxGene.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return name.hashCode();
     }
 
     public void updateSnpInfo(Snp snp) {

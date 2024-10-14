@@ -1,9 +1,6 @@
 package org.molgenis.asterix.model;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
 
 public class PgxSample {
 
@@ -11,12 +8,30 @@ public class PgxSample {
     private Map<String, Snp> haplotype1;
     private String id;
 
-    private SortedMap<String, PgxGene> genes = new TreeMap<>();
+    transient private SortedMap<String, PgxGene> genes = new TreeMap<>();
 
     public PgxSample(String id) {
         this.id = id;
         haplotype0 = new HashMap<>();
         haplotype1 = new HashMap<>();
+    }
+
+    public Set<Snp> getHaplotype0(Map<String, Snp> snps) {
+        Set<Snp> returnSnps = new HashSet<>();
+        for (Snp snp :snps.values()) {
+            Snp snpOnHaplotype = haplotype0.get(snp.getId());
+            if (snpOnHaplotype != null) returnSnps.add(snpOnHaplotype);
+        }
+        return returnSnps;
+    }
+
+    public Set<Snp> getHaplotype1(Map<String, Snp> snps) {
+        Set<Snp> returnSnps = new HashSet<>();
+        for (Snp snp :snps.values()) {
+            Snp snpOnHaplotype = haplotype1.get(snp.getId());
+            if (snpOnHaplotype != null) returnSnps.add(snpOnHaplotype);
+        }
+        return returnSnps;
     }
 
     public Map<String, Snp> getHaplotype0() {
@@ -50,4 +65,5 @@ public class PgxSample {
     public void setId(String id) {
         this.id = id;
     }
+
 }

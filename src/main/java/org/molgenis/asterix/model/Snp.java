@@ -1,7 +1,5 @@
 package org.molgenis.asterix.model;
 
-import org.molgenis.genotype.annotation.Annotation;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -21,6 +19,7 @@ public class Snp {
     private boolean isAvailable;
     private double hwePvalue;
     private Map<String, String> annotationValues;
+    private String originalCall;
 
     public int getChr() {
         return chr;
@@ -140,15 +139,6 @@ public class Snp {
                 '}';
     }
 
-/*    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Snp snp = (Snp) o;
-        return Objects.equals(id, snp.id) &&
-                Objects.equals(variantAllele, snp.variantAllele);
-    }*/
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -183,5 +173,13 @@ public class Snp {
 
     public double getHwe() {
         return hwePvalue;
+    }
+
+    public void setOriginalCall(String originalCall) {
+        this.originalCall = originalCall;
+    }
+
+    public String getOriginalCall() {
+        return originalCall;
     }
 }
