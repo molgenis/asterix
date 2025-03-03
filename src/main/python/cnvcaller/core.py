@@ -736,10 +736,8 @@ class IntensityCorrection:
                 x, index=intensity_data_preprocessed.index)
         else:
             # replicate the transform method of sklearn.decomposition.PCA
-            intensity_data_centered = (intensity_data_preprocessed
-                                       - intensity_data_preprocessed.mean(axis=0))
             batch_effects = pd.DataFrame(
-                np.dot(intensity_data_centered, self._pca_fit),
+                np.dot(intensity_data_preprocessed, self._pca_fit),
                 index=intensity_data_preprocessed.index)
         return batch_effects
     def variant_indices_outside_locus_of_interest(self, intensity_data):
@@ -1418,11 +1416,7 @@ class IterativeGaussianMixture(GaussianMixture):
     Gaussian mixture model that can be initialized with initial responsibilities instead of initial means and weights.
     This method should refrain from swapping mixture identities.
 
-    Currently, there is no mechanism in place to prevent mixture identities.
-
-    TODO: test if mixture identities change.
-    TODO: if so, either fix the weights according to HWE informed weights,
-    TODO: or recalculate weights, with the constraint of HWE.
+    The maximization step now calculates expected frequencies of each of the clusters
     """
     def __init__(
             self,
