@@ -1208,9 +1208,7 @@ class NaiveHweInformedClustering:
         nk = resp.sum(axis=0) + 10 * np.finfo(resp.dtype).eps
         means = np.dot(resp.T, intensities.values) / nk[:, np.newaxis]
         mixture_model = (
-            GaussianMixture(
-                n_components=resp.shape[1],
-                means_init=means)
+            InitializedGaussianMixture(resp_init=resp)
             .fit(intensities))
         print(mixture_model.n_iter_)
         print(mixture_model.converged_)
@@ -1325,7 +1323,7 @@ class SnpIntensityCnvCaller:
         hwe_calculator = MultiDimensionalHweCalculator(components_map)
         # Fit mixture model in this variant
         mixture_model = (
-            IterativeGaussianMixture(
+            HweGaussianMixture(
                 n_components=resp.shape[1],
                 resp_init=resp,
                 hwe_calculator=hwe_calculator)
@@ -1411,7 +1409,55 @@ class SnpIntensityCnvCaller:
             ".".join([path, "cnv_calling", "mod", "pkl"]), "rb"))
 
 
-class IterativeGaussianMixture(GaussianMixture):
+class InitializedGaussianMixture(GaussianMixture):
+    """
+    Gaussian mixture model that can be initialized with initial responsibilities instead of initial means and weights.
+    """
+    def __init__(
+            self,
+            n_components=1,
+            *,
+            covariance_type="full",
+            tol=1e-3,
+            reg_covar=1e-6,
+            max_iter=100,
+            n_init=1,
+            init_params="kmeans",
+            resp_init=None,
+            weights_init=None,
+            means_init=None,
+            precisions_init=None,
+            random_state=None,
+            warm_start=False,
+            verbose=0,
+            verbose_interval=10
+    ):
+        super().__init__(
+            n_components=n_components,
+            tol=tol,
+            reg_covar=reg_covar,
+            max_iter=max_iter,
+            n_init=n_init,
+            init_params=init_params,
+            covariance_type=covariance_type,
+            weights_init=weights_init,
+            means_init=means_init,
+            precisions_init=precisions_init,
+            random_state=random_state,
+            warm_start=warm_start,
+            verbose=verbose,
+            verbose_interval=verbose_interval,
+        )
+        self.resp_init=resp_init
+    def _initialize_parameters(self, X, random_state):
+        """
+        Initializes parameters for
+        :param X:
+        """
+        self._initialize(X, self.resp_init)
+
+
+class HweGaussianMixture(InitializedGaussianMixture):
     """
     Gaussian mixture model that can be initialized with initial responsibilities instead of initial means and weights.
     This method should refrain from swapping mixture identities.
@@ -1455,15 +1501,9 @@ class IterativeGaussianMixture(GaussianMixture):
             verbose=verbose,
             verbose_interval=verbose_interval,
         )
-        self.resp_init=resp_init
         self.hwe_calculator = hwe_calculator
         self.alpha = alpha
-    def _initialize_parameters(self, X, random_state):
-        """
-        Initializes parameters for
-        :param X:
-        """
-        self._initialize(X, self.resp_init)
+
     def _m_step(self, X, log_resp):
         """M step.
 
