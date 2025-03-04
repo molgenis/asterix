@@ -1205,10 +1205,13 @@ class NaiveHweInformedClustering:
         if assignments is None:
             assignments = self.get_copy_number_assignment(intensities, genotype_frequencies)
         resp = assignments_to_resp(assignments.values)
-        nk = resp.sum(axis=0) + 10 * np.finfo(resp.dtype).eps
-        means = np.dot(resp.T, intensities.values) / nk[:, np.newaxis]
+        hwe_calculator = MultiDimensionalHweCalculator(
+            pd.DataFrame({"A": [0, 1, 2, 3], "B": [0, 0, 0, 0]}))
         mixture_model = (
-            InitializedGaussianMixture(resp_init=resp)
+            HweGaussianMixture(
+                n_components=resp.shape[1],
+                resp_init=resp,
+                hwe_calculator=hwe_calculator)
             .fit(intensities))
         print(mixture_model.n_iter_)
         print(mixture_model.converged_)
