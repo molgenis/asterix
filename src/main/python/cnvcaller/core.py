@@ -1503,6 +1503,7 @@ class HweGaussianMixture(InitializedGaussianMixture):
             warm_start=warm_start,
             verbose=verbose,
             verbose_interval=verbose_interval,
+            resp_init=resp_init
         )
         self.hwe_calculator = hwe_calculator
         self.alpha = alpha
