@@ -681,7 +681,7 @@ class IntensityCorrection:
             index=reference_intensity_data.index)
     def _pca_fit_transform(self, intensity_data_preprocessed):
         pca = sklearn.decomposition.PCA(
-            n_components=self.pca_n_components)
+            n_components=self.pca_n_components, svd_solver='full')
         if self._pca_over_samples:
             print("Calculating principal components over samples")
             self._reference_sample_means = intensity_data_preprocessed.mean(axis=1)
@@ -1437,7 +1437,7 @@ class IterativeGaussianMixture(GaussianMixture):
             warm_start=False,
             verbose=0,
             verbose_interval=10,
-            alpha=0.5
+            alpha=1
     ):
         super().__init__(
             n_components=n_components,
