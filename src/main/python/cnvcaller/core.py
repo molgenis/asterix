@@ -866,12 +866,13 @@ class MultiDimensionalHweCalculator:
         homozygous_deletion_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 0)].sum(axis=None)
         heterozygous_deletion_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 1)].sum(axis=None)
         homozygous_normal_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 2)].sum(axis=None)
+        duplication_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 3)].sum(axis=None)
 
         # Calculate deletion allele frequency (f_del)
         f_del = ((2 * homozygous_deletion_count) + heterozygous_deletion_count) / total_alleles
 
         # Normal allele frequency (f_norm) using the heterozygous deletion frequency
-        f_norm = ((2 * homozygous_normal_count) + heterozygous_deletion_count) / total_alleles
+        f_norm = ((2 * homozygous_normal_count) + heterozygous_deletion_count + duplication_count) / total_alleles
 
         # Duplication allele frequency (f_dup) (since f_del + f_norm + f_dup = 1)
         f_dup = 1 - (f_del + f_norm)
