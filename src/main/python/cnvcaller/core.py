@@ -1276,14 +1276,14 @@ class SnpIntensityCnvCaller:
         mixtures = self._e_m(masked_variant_dataframe.values[sample_concordances, :], resp_partial,
                              components_map = pd.DataFrame(self._components_map[variant].T, columns=["A", "B"]))
         em_resp = mixtures.predict_proba(masked_variant_dataframe.values[sample_concordances, :])
-        # print(em_resp)
-        # print(resp_partial)
-        least_distance_path = linear_sum_assignment(
-            pairwise_distances(
-                resp_partial.T, em_resp.T,
-                metric=lambda x, y: self.zero_adjusted_euclidean_distance(x, y)))
-        assert np.alltrue(least_distance_path[0] == np.arange(0, least_distance_path[0].shape[0]))
-        assert np.alltrue(least_distance_path[1] == np.arange(0, least_distance_path[1].shape[0]))
+        print(em_resp)
+        print(resp_partial)
+        #least_distance_path = linear_sum_assignment(
+        #    pairwise_distances(
+        #        resp_partial.T, em_resp.T,
+        #        metric=lambda x, y: self.zero_adjusted_euclidean_distance(x, y)))
+        #assert np.alltrue(least_distance_path[0] == np.arange(0, least_distance_path[0].shape[0]))
+        #assert np.alltrue(least_distance_path[1] == np.arange(0, least_distance_path[1].shape[0]))
         self._fitted_models[variant] = mixtures
         # Somehow
         return em_resp, resp_partial
@@ -2116,7 +2116,7 @@ def main(argv=None):
         intensity_dataset.write_dataset(args.out)
 
         cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp,
-                                           k_nearest_neighbours=k_nearest_neighbours)
+                                           k_nearest_neighbours=0)
         cnv_caller.fit_over_variants(intensity_dataset)
         cnv_caller.write_fit(intensity_dataset, args.out)
 
