@@ -823,38 +823,82 @@ class MultiDimensionalHweCalculator:
         # Get list of clusters
         print("Init weights")
         print(resp)
-        total = (resp.sum(axis=None) * 2)
-        print("Total")
-        print(total)
-        # Calculate a
-        a_allele_frequency = np.multiply(resp, self.cluster_genotype_map['A'].values).sum(axis=None) / total
-        # Calculate b
-        b_allele_frequency = np.multiply(resp, self.cluster_genotype_map['B'].values).sum(axis=None) / total
-        # Calculate -1
-        del_allele_frequency = np.multiply(
-            resp, self.cluster_genotype_map['Lack'].values).sum(axis=None) / total
-        # Calculate +1
-        dup_allele_frequency = np.multiply(
-            resp, self.cluster_genotype_map['Excess'].values).sum(axis=None) / total
-        # Calculate normal Cnv Dosage
-        normal_allele_frequency = np.multiply(
-            resp, self.cluster_genotype_map['Normal'].values).sum(axis=None) / total
-        # Calculate expected probabilities
-        exp_freq = (
-            np.power(a_allele_frequency, self.cluster_genotype_map['A']) *
-            np.power(b_allele_frequency, self.cluster_genotype_map['B']) *
-            np.power(del_allele_frequency, self.cluster_genotype_map['Lack']) *
-            np.power(dup_allele_frequency, self.cluster_genotype_map['Excess']) *
-            np.power(normal_allele_frequency, self.cluster_genotype_map['Normal']) *
-            self.cluster_genotype_map['Perm']) * resp.sum(axis=None)
-        print("Expected allele frequencies")
-        print(a_allele_frequency)
-        print(b_allele_frequency)
-        print(del_allele_frequency)
-        print(dup_allele_frequency)
-        print(normal_allele_frequency)
-        print(exp_freq.values)
-        return exp_freq.values
+
+        total_genotypes = resp.sum(axis=None)
+
+        expected_dosage_frequencies = self._calculate_expected_dosage_frequencies(resp)
+        a_allele_count = np.multiply(resp, self.cluster_genotype_map['A'].values).sum(axis=None)
+        b_allele_count = np.multiply(resp, self.cluster_genotype_map['B'].values).sum(axis=None)
+
+        a_allele_freq = a_allele_count / (a_allele_count + b_allele_count)
+        b_allele_freq = b_allele_count / (a_allele_count + b_allele_count)
+
+        # Print results
+        print(f"a_allele_freq (A Allele Frequency): {a_allele_freq}")
+        print(f"b_allele_freq (B Allele Frequency): {b_allele_freq}")
+
+        expected_genotype_frequencies = (
+                           np.power(a_allele_freq, self.cluster_genotype_map['A']) *
+                           np.power(b_allele_freq, self.cluster_genotype_map['B']) *
+                           self.cluster_genotype_map['Perm'])
+
+        print(expected_genotype_frequencies)
+
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 0] *= (
+            expected_dosage_frequencies[0])
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 1] *= (
+            expected_dosage_frequencies[1])
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 2] *= (
+            expected_dosage_frequencies[2])
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 3] *= (
+            expected_dosage_frequencies[3])
+
+        print(expected_genotype_frequencies)
+
+        return expected_genotype_frequencies.values * total_genotypes
+
+    def _calculate_expected_dosage_frequencies(self, resp):
+        # Total number of alleles in the population (each individual has 2 alleles)
+        total_alleles = resp.sum(axis=None) * 2
+        print("Total alleles:", total_alleles)
+
+        # First calculate genotype counts
+        homozygous_deletion_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 0)].sum(axis=None)
+        heterozygous_deletion_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 1)].sum(axis=None)
+        homozygous_normal_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 2)].sum(axis=None)
+
+        # Calculate deletion allele frequency (f_del)
+        f_del = ((2 * homozygous_deletion_count) + heterozygous_deletion_count) / total_alleles
+
+        # Normal allele frequency (f_norm) using the heterozygous deletion frequency
+        f_norm = ((2 * homozygous_normal_count) + heterozygous_deletion_count) / total_alleles
+
+        # Duplication allele frequency (f_dup) (since f_del + f_norm + f_dup = 1)
+        f_dup = 1 - (f_del + f_norm)
+
+        # Ensure allele frequencies sum to 1
+        assert np.isclose(f_del + f_norm + f_dup, 1), "Allele frequencies do not sum to 1!"
+
+        # Compute expected genotype frequencies using Hardy-Weinberg equilibrium
+        expected_homozygous_deletion_freq = f_del ** 2
+        expected_heterozygous_deletion_freq = 2 * f_del * f_norm
+        expected_homozygous_normal_freq = f_norm ** 2 + (2 * f_del * f_dup)
+        expected_duplication_freq = (2 * f_dup * f_norm) + (f_dup ** 2)
+
+        # Print results
+        print(f"f_del (Deletion Allele Frequency): {f_del}")
+        print(f"f_norm (Normal Allele Frequency): {f_norm}")
+        print(f"f_dup (Duplication Allele Frequency): {f_dup}")
+
+        print(f"Expected Homozygous Deletion Frequency: {expected_homozygous_deletion_freq}")
+        print(f"Expected Heterozygous Deletion Frequency: {expected_heterozygous_deletion_freq}")
+        print(f"Expected Homozygous Normal Frequency: {expected_homozygous_normal_freq}")
+        print(f"Expected Duplication Frequency: {expected_duplication_freq}")
+
+        return {0: expected_homozygous_deletion_freq,
+                1: expected_heterozygous_deletion_freq,
+                2: expected_homozygous_normal_freq,
+                3: expected_duplication_freq}
 
 
 def calculate_theta(dataframe):
