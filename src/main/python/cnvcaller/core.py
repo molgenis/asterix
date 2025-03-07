@@ -1194,6 +1194,36 @@ class NaiveHweInformedClustering:
                 "marker": [0]
             })
         ])
+    def get_responsibility_matrix(self, intensities, genotype_frequencies=None):
+        """Compute soft assignments (responsibility matrix) for each sample."""
+        if genotype_frequencies is None:
+            genotype_frequencies = self.get_copy_number_genotype_frequencies()
+        # Sort genotype frequencies by genotype value
+        genotype_frequencies_ordered = genotype_frequencies.sort_values(by=[self.genotype_label])
+        cumulative_frequencies = np.cumsum(genotype_frequencies_ordered['freq_genotype'])
+        ordered_genotype_markers = genotype_frequencies_ordered[self.genotype_label].values
+        # Compute breakpoints
+        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
+        # Initialize responsibility matrix
+        num_samples = intensities.shape[0]
+        num_bins = len(ordered_genotype_markers)
+        resp_matrix = np.zeros((num_samples, num_bins))
+        # Compute probabilities based on normal CDF
+        for bin_idx in range(num_bins):
+            if bin_idx == 0:
+                lower_bound = -np.inf
+            else:
+                lower_bound = break_points[bin_idx - 1]
+            if bin_idx == num_bins - 1:
+                upper_bound = np.inf
+            else:
+                upper_bound = break_points[bin_idx]
+            # Use normal CDF to estimate probabilities
+            bin_prob = scipy.stats.norm.cdf(intensities, loc=upper_bound) - scipy.stats.norm.cdf(intensities, loc=lower_bound)
+            resp_matrix[:, bin_idx] = bin_prob.flatten()
+        # Normalize rows so probabilities sum to 1
+        resp_matrix /= resp_matrix.sum(axis=1, keepdims=True)
+        return pd.DataFrame(resp_matrix, index=intensities.index, columns=ordered_genotype_markers)
     def get_copy_number_assignment(self, intensities, genotype_frequencies=None):
         if genotype_frequencies is None:
             genotype_frequencies = self.get_copy_number_genotype_frequencies()
@@ -1244,25 +1274,24 @@ class NaiveHweInformedClustering:
     def write_output(self, path, naive_copy_number_assignment):
         naive_copy_number_assignment.to_csv(
             ".".join([path, "naive_clustering", "assignments", "csv", "gz"]))
-    def update_assignments_gaussian(self, intensities, assignments=None, genotype_frequencies=None):
+    def update_assignments_gaussian(self, intensities, resp=None, genotype_frequencies=None):
         if genotype_frequencies is None:
             genotype_frequencies = self.get_copy_number_genotype_frequencies()
-        if assignments is None:
-            assignments = self.get_copy_number_assignment(intensities, genotype_frequencies)
-        resp = assignments_to_resp(assignments.values)
+        if resp is None:
+            resp = self.get_responsibility_matrix(intensities, genotype_frequencies)
         hwe_calculator = MultiDimensionalHweCalculator(
             pd.DataFrame({"A": [0, 1, 2, 3], "B": [0, 0, 0, 0]}))
         mixture_model = (
             HweGaussianMixture(
                 n_components=resp.shape[1],
-                resp_init=resp,
+                resp_init=resp.values,
                 hwe_calculator=hwe_calculator)
             .fit(intensities))
         print(mixture_model.n_iter_)
         print(mixture_model.converged_)
         probabilities = mixture_model.predict_proba(intensities)
-        assignments[...] = resp_to_assignments(probabilities)
-        return pd.DataFrame(probabilities, index=assignments.index, columns=self.genotypes), assignments
+        assignments = pd.Series(resp_to_assignments(probabilities), index=resp.index, name=self.genotype_label)
+        return pd.DataFrame(probabilities, index=resp.index, columns=resp.columns), assignments
 
 
 class SnpIntensityCnvCaller:
@@ -2137,16 +2166,17 @@ def main(argv=None):
             naive_clustering = NaiveHweInformedClustering(
                 genotype_labels=[-2, -1, 0, 1], ref_genotype = 2)
             copy_number_frequencies = naive_clustering.get_copy_number_genotype_frequencies()
-            naive_copy_number_assignment = naive_clustering.get_copy_number_assignment(
-                corrected_intensities[variants_for_naive_clustering.Name.values],
+            mean_intensity_data = corrected_intensities.mean(axis=1)  # Take mean across columns
+            resp = naive_clustering.get_responsibility_matrix(
+                corrected_intensities[variants_for_naive_clustering.Name.values].mean(axis=1),
                 copy_number_frequencies)
             naive_clustering.write_output(
-                args.out, naive_copy_number_assignment)
+                args.out, resp)
             print("Naive clustering complete", end=os.linesep*2)
             updated_naive_cnv_probabilities, updated_naive_cnv_assignment = (
                 naive_clustering.update_assignments_gaussian(
                 corrected_intensities[variants_for_naive_clustering.Name.values],
-                assignments=naive_copy_number_assignment))
+                resp=resp))
             updated_naive_cnv_probabilities.to_csv(
                 ".".join([args.out, "naive_clustering", "updated_probabilities", "csv", "gz"]))
             print(np.unique(updated_naive_cnv_assignment, return_counts=True))
