@@ -1194,81 +1194,46 @@ class NaiveHweInformedClustering:
                 "marker": [0]
             })
         ])
-    def get_responsibility_matrix(self, intensities, genotype_frequencies=None):
-        """Compute soft assignments (responsibility matrix) for each sample."""
-        if genotype_frequencies is None:
-            genotype_frequencies = self.get_copy_number_genotype_frequencies()
+    def get_responsibility_matrix(self, intensities, genotype_frequencies):
+        """
+        Compute the responsibility matrix for each sample using soft assignments.
+
+        Parameters:
+            intensities (pd.Series or np.array): 1D array of intensity values.
+            genotype_frequencies (pd.DataFrame): DataFrame with 'marker_genotype' and 'freq_genotype' columns.
+
+        Returns:
+            pd.DataFrame: Responsibility matrix with probabilities for each bin.
+        """
         # Sort genotype frequencies by genotype value
         genotype_frequencies_ordered = genotype_frequencies.sort_values(by=[self.genotype_label])
-        cumulative_frequencies = np.cumsum(genotype_frequencies_ordered['freq_genotype'])
         ordered_genotype_markers = genotype_frequencies_ordered[self.genotype_label].values
-        # Compute breakpoints
-        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
-        # Initialize responsibility matrix
-        num_samples = intensities.shape[0]
+        cumulative_frequencies = np.cumsum(genotype_frequencies_ordered["freq_genotype"])
         num_bins = len(ordered_genotype_markers)
-        resp_matrix = np.zeros((num_samples, num_bins))
-        # Compute probabilities based on normal CDF
+        # Compute breakpoints and bin centers
+        break_points = np.quantile(
+            intensities,
+            np.cumsum(genotype_frequencies_ordered["freq_genotype"]), axis=0)
+        bin_centers = np.concatenate(([min(intensities)], (break_points[:-1] + break_points[1:]) / 2, [max(intensities)]))
+        # Estimate standard deviation for bin spacing
+        bin_sd = (max(intensities) - min(intensities)) / (num_bins * 2)
+        # Compute probability density using Gaussian function centered on bin means
+        resp_matrix = np.zeros((len(intensities), num_bins))
         for bin_idx in range(num_bins):
-            if bin_idx == 0:
-                lower_bound = -np.inf
-            else:
-                lower_bound = break_points[bin_idx - 1]
-            if bin_idx == num_bins - 1:
-                upper_bound = np.inf
-            else:
-                upper_bound = break_points[bin_idx]
-            # Use normal CDF to estimate probabilities
-            bin_prob = scipy.stats.norm.cdf(intensities, loc=upper_bound) - scipy.stats.norm.cdf(intensities, loc=lower_bound)
-            resp_matrix[:, bin_idx] = bin_prob.flatten()
-        # Normalize rows so probabilities sum to 1
+            resp_matrix[:, bin_idx] = scipy.stats.norm.pdf(intensities, loc=bin_centers[bin_idx], scale=bin_sd)
+        # Step 1: Compute bin weights
+        nk = resp_matrix.sum(axis=0) + 10 * np.finfo(resp_matrix.dtype).eps
+        print(nk)
+        # Step 2: Compute adjustment weights
+        weights = genotype_frequencies_ordered["freq_genotype"].values * resp_matrix.sum(axis=None) / nk
+        print(weights)
+        # Step 3: Apply adjustment weights (column-wise)
+        resp_matrix *= weights
+        print(resp_matrix.sum(axis=0))
+        # Step 4: Normalize columns to sum to 1
         resp_matrix /= resp_matrix.sum(axis=1, keepdims=True)
+        # Convert to DataFrame
         return pd.DataFrame(resp_matrix, index=intensities.index, columns=ordered_genotype_markers)
-    def get_copy_number_assignment(self, intensities, genotype_frequencies=None):
-        if genotype_frequencies is None:
-            genotype_frequencies = self.get_copy_number_genotype_frequencies()
-        genotype_frequencies_ordered = genotype_frequencies.sort_values(by=[self.genotype_label])
-        cumulative_frequencies = np.cumsum(
-            genotype_frequencies_ordered['freq_genotype'])
-        ordered_genotype_markers = genotype_frequencies_ordered[self.genotype_label]
-        genotype_marker_matrix = self.get_votes(
-            cumulative_frequencies, intensities, ordered_genotype_markers)
-        # Do at least half of the intensity variables agree?
-        # Get the frequency of the most frequent item in the list
-        voting_result = np.apply_along_axis(
-            lambda x: self.vote(x),
-            axis=self.COLUMN_INDEX,
-            arr=genotype_marker_matrix)
-        return pd.Series(voting_result, index=intensities.index, name=self.genotype_label)
-    def get_votes(self, cumulative_frequencies, intensities, ordered_genotype_markers):
-        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
-        genotype_marker_matrix = np.empty(intensities.shape, dtype=int)
-        for column_index in range(intensities.shape[self.COLUMN_INDEX]):
-            genotype_marker_matrix[:, column_index] = (
-                ordered_genotype_markers[np.digitize(
-                    intensities.iloc[:, column_index],
-                    break_points[:, column_index],
-                    right=True)]
-            )
-        return genotype_marker_matrix
-    def vote(self, votes):
-        mode_result = scipy.stats.mode(votes, nan_policy='propagate')
-        if mode_result.count[0] > (0.5 * len(votes)):
-            return float(mode_result.mode[0])
-        print(mode_result.count[0] > (0.5 * len(votes)))
-        return np.NaN
-    def get_centroids(self, intensities, copy_number_assignment=None, copy_number_frequencies=None):
-        if copy_number_assignment is None:
-            copy_number_assignment = self.get_copy_number_assignment(intensities).values
-        if copy_number_frequencies is None:
-            copy_number_frequencies = self.get_copy_number_genotype_frequencies()
-        copy_number_frequencies.index = copy_number_frequencies[self.genotype_label]
-        copy_number_centroids = copy_number_frequencies.apply(
-            lambda x:
-                intensities[copy_number_assignment == x[self.genotype_label]].mean(axis=0),
-            axis=1, result_type='expand')
-        print(copy_number_centroids)
-        return copy_number_centroids
     def maximum_haplotype_counts(self):
         return dict(zip(self.genotypes, self.genotypes + self.ref_genotype + 1))
     def write_output(self, path, naive_copy_number_assignment):
@@ -1285,7 +1250,7 @@ class NaiveHweInformedClustering:
             HweGaussianMixture(
                 n_components=resp.shape[1],
                 resp_init=resp.values,
-                hwe_calculator=hwe_calculator)
+                hwe_calculator=hwe_calculator, alpha=0.2)
             .fit(intensities))
         print(mixture_model.n_iter_)
         print(mixture_model.converged_)
@@ -1403,7 +1368,8 @@ class SnpIntensityCnvCaller:
             HweGaussianMixture(
                 n_components=resp.shape[1],
                 resp_init=resp,
-                hwe_calculator=hwe_calculator)
+                hwe_calculator=hwe_calculator,
+                alpha=0.5)
             .fit(values))
         return mixture_model
     def _estimate_centroids(self, values, resp):
@@ -1596,6 +1562,7 @@ class HweGaussianMixture(InitializedGaussianMixture):
         self.weights_, self.means_, self.covariances_ = _estimate_gaussian_parameters(
             X, np.exp(log_resp), self.reg_covar, self.covariance_type
         )
+        print(self.means_)
         exp = self.hwe_calculator.calculate_expected_frequencies(self.weights_)
         hwe_weights = exp / self.weights_ * self.alpha
         self.weights_ *= hwe_weights
@@ -2166,7 +2133,6 @@ def main(argv=None):
             naive_clustering = NaiveHweInformedClustering(
                 genotype_labels=[-2, -1, 0, 1], ref_genotype = 2)
             copy_number_frequencies = naive_clustering.get_copy_number_genotype_frequencies()
-            mean_intensity_data = corrected_intensities.mean(axis=1)  # Take mean across columns
             resp = naive_clustering.get_responsibility_matrix(
                 corrected_intensities[variants_for_naive_clustering.Name.values].mean(axis=1),
                 copy_number_frequencies)
@@ -2175,13 +2141,15 @@ def main(argv=None):
             print("Naive clustering complete", end=os.linesep*2)
             updated_naive_cnv_probabilities, updated_naive_cnv_assignment = (
                 naive_clustering.update_assignments_gaussian(
-                corrected_intensities[variants_for_naive_clustering.Name.values],
-                resp=resp))
+                    corrected_intensities[variants_for_naive_clustering.Name.values],
+                    resp=resp))
             updated_naive_cnv_probabilities.to_csv(
                 ".".join([args.out, "naive_clustering", "updated_probabilities", "csv", "gz"]))
             print(np.unique(updated_naive_cnv_assignment, return_counts=True))
 
-            resp = assignments_to_resp(updated_naive_cnv_assignment.values)
+            resp = pd.DataFrame(assignments_to_resp(updated_naive_cnv_assignment.values),
+                                index=updated_naive_cnv_probabilities.index,
+                                columns=updated_naive_cnv_probabilities.columns)
             sample_subset = None
 
         intensity_dataset = get_corrected_complex_dataset(
@@ -2190,8 +2158,8 @@ def main(argv=None):
 
         intensity_dataset.write_dataset(args.out)
 
-        cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp,
-                                           k_nearest_neighbours=0)
+        cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp.values,
+                                           k_nearest_neighbours=k_nearest_neighbours)
         cnv_caller.fit_over_variants(intensity_dataset)
         cnv_caller.write_fit(intensity_dataset, args.out)
 
