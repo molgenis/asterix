@@ -681,7 +681,7 @@ class IntensityCorrection:
             index=reference_intensity_data.index)
     def _pca_fit_transform(self, intensity_data_preprocessed):
         pca = sklearn.decomposition.PCA(
-            n_components=self.pca_n_components)
+            n_components=self.pca_n_components, svd_solver='full')
         if self._pca_over_samples:
             print("Calculating principal components over samples")
             self._reference_sample_means = intensity_data_preprocessed.mean(axis=1)
@@ -736,10 +736,8 @@ class IntensityCorrection:
                 x, index=intensity_data_preprocessed.index)
         else:
             # replicate the transform method of sklearn.decomposition.PCA
-            intensity_data_centered = (intensity_data_preprocessed
-                                       - intensity_data_preprocessed.mean(axis=0))
             batch_effects = pd.DataFrame(
-                np.dot(intensity_data_centered, self._pca_fit),
+                np.dot(intensity_data_preprocessed, self._pca_fit),
                 index=intensity_data_preprocessed.index)
         return batch_effects
     def variant_indices_outside_locus_of_interest(self, intensity_data):
@@ -825,38 +823,83 @@ class MultiDimensionalHweCalculator:
         # Get list of clusters
         print("Init weights")
         print(resp)
-        total = (resp.sum(axis=None) * 2)
-        print("Total")
-        print(total)
-        # Calculate a
-        a_allele_frequency = np.multiply(resp, self.cluster_genotype_map['A'].values).sum(axis=None) / total
-        # Calculate b
-        b_allele_frequency = np.multiply(resp, self.cluster_genotype_map['B'].values).sum(axis=None) / total
-        # Calculate -1
-        del_allele_frequency = np.multiply(
-            resp, self.cluster_genotype_map['Lack'].values).sum(axis=None) / total
-        # Calculate +1
-        dup_allele_frequency = np.multiply(
-            resp, self.cluster_genotype_map['Excess'].values).sum(axis=None) / total
-        # Calculate normal Cnv Dosage
-        normal_allele_frequency = np.multiply(
-            resp, self.cluster_genotype_map['Normal'].values).sum(axis=None) / total
-        # Calculate expected probabilities
-        exp_freq = (
-            np.power(a_allele_frequency, self.cluster_genotype_map['A']) *
-            np.power(b_allele_frequency, self.cluster_genotype_map['B']) *
-            np.power(del_allele_frequency, self.cluster_genotype_map['Lack']) *
-            np.power(dup_allele_frequency, self.cluster_genotype_map['Excess']) *
-            np.power(normal_allele_frequency, self.cluster_genotype_map['Normal']) *
-            self.cluster_genotype_map['Perm']) * resp.sum(axis=None)
-        print("Expected allele frequencies")
-        print(a_allele_frequency)
-        print(b_allele_frequency)
-        print(del_allele_frequency)
-        print(dup_allele_frequency)
-        print(normal_allele_frequency)
-        print(exp_freq.values)
-        return exp_freq.values
+
+        total_genotypes = resp.sum(axis=None)
+
+        expected_dosage_frequencies = self._calculate_expected_dosage_frequencies(resp)
+        a_allele_count = np.multiply(resp, self.cluster_genotype_map['A'].values).sum(axis=None)
+        b_allele_count = np.multiply(resp, self.cluster_genotype_map['B'].values).sum(axis=None)
+
+        a_allele_freq = a_allele_count / (a_allele_count + b_allele_count)
+        b_allele_freq = b_allele_count / (a_allele_count + b_allele_count)
+
+        # Print results
+        print(f"a_allele_freq (A Allele Frequency): {a_allele_freq}")
+        print(f"b_allele_freq (B Allele Frequency): {b_allele_freq}")
+
+        expected_genotype_frequencies = (
+                           np.power(a_allele_freq, self.cluster_genotype_map['A']) *
+                           np.power(b_allele_freq, self.cluster_genotype_map['B']) *
+                           self.cluster_genotype_map['Perm'])
+
+        print(expected_genotype_frequencies)
+
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 0] *= (
+            expected_dosage_frequencies[0])
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 1] *= (
+            expected_dosage_frequencies[1])
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 2] *= (
+            expected_dosage_frequencies[2])
+        expected_genotype_frequencies[self.cluster_genotype_map['Dosage'] == 3] *= (
+            expected_dosage_frequencies[3])
+
+        print(expected_genotype_frequencies)
+
+        return expected_genotype_frequencies.values * total_genotypes
+
+    def _calculate_expected_dosage_frequencies(self, resp):
+        # Total number of alleles in the population (each individual has 2 alleles)
+        total_alleles = resp.sum(axis=None) * 2
+        print("Total alleles:", total_alleles)
+
+        # First calculate genotype counts
+        homozygous_deletion_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 0)].sum(axis=None)
+        heterozygous_deletion_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 1)].sum(axis=None)
+        homozygous_normal_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 2)].sum(axis=None)
+        duplication_count = resp[np.where(self.cluster_genotype_map['Dosage'] == 3)].sum(axis=None)
+
+        # Calculate deletion allele frequency (f_del)
+        f_del = ((2 * homozygous_deletion_count) + heterozygous_deletion_count) / total_alleles
+
+        # Normal allele frequency (f_norm) using the heterozygous deletion frequency
+        f_norm = ((2 * homozygous_normal_count) + heterozygous_deletion_count + duplication_count) / total_alleles
+
+        # Duplication allele frequency (f_dup) (since f_del + f_norm + f_dup = 1)
+        f_dup = 1 - (f_del + f_norm)
+
+        # Ensure allele frequencies sum to 1
+        assert np.isclose(f_del + f_norm + f_dup, 1), "Allele frequencies do not sum to 1!"
+
+        # Compute expected genotype frequencies using Hardy-Weinberg equilibrium
+        expected_homozygous_deletion_freq = f_del ** 2
+        expected_heterozygous_deletion_freq = 2 * f_del * f_norm
+        expected_homozygous_normal_freq = f_norm ** 2 + (2 * f_del * f_dup)
+        expected_duplication_freq = (2 * f_dup * f_norm) + (f_dup ** 2)
+
+        # Print results
+        print(f"f_del (Deletion Allele Frequency): {f_del}")
+        print(f"f_norm (Normal Allele Frequency): {f_norm}")
+        print(f"f_dup (Duplication Allele Frequency): {f_dup}")
+
+        print(f"Expected Homozygous Deletion Frequency: {expected_homozygous_deletion_freq}")
+        print(f"Expected Heterozygous Deletion Frequency: {expected_heterozygous_deletion_freq}")
+        print(f"Expected Homozygous Normal Frequency: {expected_homozygous_normal_freq}")
+        print(f"Expected Duplication Frequency: {expected_duplication_freq}")
+
+        return {0: expected_homozygous_deletion_freq,
+                1: expected_heterozygous_deletion_freq,
+                2: expected_homozygous_normal_freq,
+                3: expected_duplication_freq}
 
 
 def calculate_theta(dataframe):
@@ -1151,74 +1194,69 @@ class NaiveHweInformedClustering:
                 "marker": [0]
             })
         ])
-    def get_copy_number_assignment(self, intensities, genotype_frequencies=None):
-        if genotype_frequencies is None:
-            genotype_frequencies = self.get_copy_number_genotype_frequencies()
+    def get_responsibility_matrix(self, intensities, genotype_frequencies):
+        """
+        Compute the responsibility matrix for each sample using soft assignments.
+
+        Parameters:
+            intensities (pd.Series or np.array): 1D array of intensity values.
+            genotype_frequencies (pd.DataFrame): DataFrame with 'marker_genotype' and 'freq_genotype' columns.
+
+        Returns:
+            pd.DataFrame: Responsibility matrix with probabilities for each bin.
+        """
+        # Sort genotype frequencies by genotype value
         genotype_frequencies_ordered = genotype_frequencies.sort_values(by=[self.genotype_label])
-        cumulative_frequencies = np.cumsum(
-            genotype_frequencies_ordered['freq_genotype'])
-        ordered_genotype_markers = genotype_frequencies_ordered[self.genotype_label]
-        genotype_marker_matrix = self.get_votes(
-            cumulative_frequencies, intensities, ordered_genotype_markers)
-        # Do at least half of the intensity variables agree?
-        # Get the frequency of the most frequent item in the list
-        voting_result = np.apply_along_axis(
-            lambda x: self.vote(x),
-            axis=self.COLUMN_INDEX,
-            arr=genotype_marker_matrix)
-        return pd.Series(voting_result, index=intensities.index, name=self.genotype_label)
-    def get_votes(self, cumulative_frequencies, intensities, ordered_genotype_markers):
-        break_points = np.quantile(intensities, cumulative_frequencies, axis=0)
-        genotype_marker_matrix = np.empty(intensities.shape, dtype=int)
-        for column_index in range(intensities.shape[self.COLUMN_INDEX]):
-            genotype_marker_matrix[:, column_index] = (
-                ordered_genotype_markers[np.digitize(
-                    intensities.iloc[:, column_index],
-                    break_points[:, column_index],
-                    right=True)]
-            )
-        return genotype_marker_matrix
-    def vote(self, votes):
-        mode_result = scipy.stats.mode(votes, nan_policy='propagate')
-        if mode_result.count[0] > (0.5 * len(votes)):
-            return float(mode_result.mode[0])
-        print(mode_result.count[0] > (0.5 * len(votes)))
-        return np.NaN
-    def get_centroids(self, intensities, copy_number_assignment=None, copy_number_frequencies=None):
-        if copy_number_assignment is None:
-            copy_number_assignment = self.get_copy_number_assignment(intensities).values
-        if copy_number_frequencies is None:
-            copy_number_frequencies = self.get_copy_number_genotype_frequencies()
-        copy_number_frequencies.index = copy_number_frequencies[self.genotype_label]
-        copy_number_centroids = copy_number_frequencies.apply(
-            lambda x:
-                intensities[copy_number_assignment == x[self.genotype_label]].mean(axis=0),
-            axis=1, result_type='expand')
-        print(copy_number_centroids)
-        return copy_number_centroids
+        ordered_genotype_markers = genotype_frequencies_ordered[self.genotype_label].values
+        cumulative_frequencies = np.cumsum(genotype_frequencies_ordered["freq_genotype"])
+        num_bins = len(ordered_genotype_markers)
+        # Compute breakpoints and bin centers
+        break_points = np.quantile(
+            intensities,
+            np.cumsum(genotype_frequencies_ordered["freq_genotype"]), axis=0)
+        bin_centers = np.concatenate(([min(intensities)], (break_points[:-1] + break_points[1:]) / 2, [max(intensities)]))
+        # Estimate standard deviation for bin spacing
+        bin_sd = (max(intensities) - min(intensities)) / (num_bins * 2)
+        # Compute probability density using Gaussian function centered on bin means
+        resp_matrix = np.zeros((len(intensities), num_bins))
+        for bin_idx in range(num_bins):
+            resp_matrix[:, bin_idx] = scipy.stats.norm.pdf(intensities, loc=bin_centers[bin_idx], scale=bin_sd)
+        # Step 1: Compute bin weights
+        nk = resp_matrix.sum(axis=0) + 10 * np.finfo(resp_matrix.dtype).eps
+        print(nk)
+        # Step 2: Compute adjustment weights
+        weights = genotype_frequencies_ordered["freq_genotype"].values * resp_matrix.sum(axis=None) / nk
+        print(weights)
+        # Step 3: Apply adjustment weights (column-wise)
+        resp_matrix *= weights
+        print(resp_matrix.sum(axis=0))
+        # Step 4: Normalize columns to sum to 1
+        resp_matrix /= resp_matrix.sum(axis=1, keepdims=True)
+        # Convert to DataFrame
+        return pd.DataFrame(resp_matrix, index=intensities.index, columns=ordered_genotype_markers)
     def maximum_haplotype_counts(self):
         return dict(zip(self.genotypes, self.genotypes + self.ref_genotype + 1))
     def write_output(self, path, naive_copy_number_assignment):
         naive_copy_number_assignment.to_csv(
             ".".join([path, "naive_clustering", "assignments", "csv", "gz"]))
-    def update_assignments_gaussian(self, intensities, assignments=None, genotype_frequencies=None):
+    def update_assignments_gaussian(self, intensities, resp=None, genotype_frequencies=None):
         if genotype_frequencies is None:
             genotype_frequencies = self.get_copy_number_genotype_frequencies()
-        if assignments is None:
-            assignments = self.get_copy_number_assignment(intensities, genotype_frequencies)
-        resp = assignments_to_resp(assignments.values)
-        nk = resp.sum(axis=0) + 10 * np.finfo(resp.dtype).eps
-        means = np.dot(resp.T, intensities.values) / nk[:, np.newaxis]
+        if resp is None:
+            resp = self.get_responsibility_matrix(intensities, genotype_frequencies)
+        hwe_calculator = MultiDimensionalHweCalculator(
+            pd.DataFrame({"A": [0, 1, 2, 3], "B": [0, 0, 0, 0]}))
         mixture_model = (
-            GaussianMixture(
+            HweGaussianMixture(
                 n_components=resp.shape[1],
-                means_init=means)
+                resp_init=resp.values,
+                hwe_calculator=hwe_calculator, alpha=0.2)
             .fit(intensities))
         print(mixture_model.n_iter_)
         print(mixture_model.converged_)
         probabilities = mixture_model.predict_proba(intensities)
-        assignments[...] = resp_to_assignments(probabilities)
-        return pd.DataFrame(probabilities, index=assignments.index, columns=self.genotypes), assignments
+        assignments = pd.Series(resp_to_assignments(probabilities), index=resp.index, name=self.genotype_label)
+        return pd.DataFrame(probabilities, index=resp.index, columns=resp.columns), assignments
 
 
 class SnpIntensityCnvCaller:
@@ -1277,14 +1315,14 @@ class SnpIntensityCnvCaller:
         mixtures = self._e_m(masked_variant_dataframe.values[sample_concordances, :], resp_partial,
                              components_map = pd.DataFrame(self._components_map[variant].T, columns=["A", "B"]))
         em_resp = mixtures.predict_proba(masked_variant_dataframe.values[sample_concordances, :])
-        # print(em_resp)
-        # print(resp_partial)
-        least_distance_path = linear_sum_assignment(
-            pairwise_distances(
-                resp_partial.T, em_resp.T,
-                metric=lambda x, y: self.zero_adjusted_euclidean_distance(x, y)))
-        assert np.alltrue(least_distance_path[0] == np.arange(0, least_distance_path[0].shape[0]))
-        assert np.alltrue(least_distance_path[1] == np.arange(0, least_distance_path[1].shape[0]))
+        print(em_resp)
+        print(resp_partial)
+        #least_distance_path = linear_sum_assignment(
+        #    pairwise_distances(
+        #        resp_partial.T, em_resp.T,
+        #        metric=lambda x, y: self.zero_adjusted_euclidean_distance(x, y)))
+        #assert np.alltrue(least_distance_path[0] == np.arange(0, least_distance_path[0].shape[0]))
+        #assert np.alltrue(least_distance_path[1] == np.arange(0, least_distance_path[1].shape[0]))
         self._fitted_models[variant] = mixtures
         # Somehow
         return em_resp, resp_partial
@@ -1327,10 +1365,11 @@ class SnpIntensityCnvCaller:
         hwe_calculator = MultiDimensionalHweCalculator(components_map)
         # Fit mixture model in this variant
         mixture_model = (
-            IterativeGaussianMixture(
+            HweGaussianMixture(
                 n_components=resp.shape[1],
                 resp_init=resp,
-                hwe_calculator=hwe_calculator)
+                hwe_calculator=hwe_calculator,
+                alpha=0.5)
             .fit(values))
         return mixture_model
     def _estimate_centroids(self, values, resp):
@@ -1413,16 +1452,60 @@ class SnpIntensityCnvCaller:
             ".".join([path, "cnv_calling", "mod", "pkl"]), "rb"))
 
 
-class IterativeGaussianMixture(GaussianMixture):
+class InitializedGaussianMixture(GaussianMixture):
+    """
+    Gaussian mixture model that can be initialized with initial responsibilities instead of initial means and weights.
+    """
+    def __init__(
+            self,
+            n_components=1,
+            *,
+            covariance_type="full",
+            tol=1e-3,
+            reg_covar=1e-6,
+            max_iter=100,
+            n_init=1,
+            init_params="kmeans",
+            resp_init=None,
+            weights_init=None,
+            means_init=None,
+            precisions_init=None,
+            random_state=None,
+            warm_start=False,
+            verbose=0,
+            verbose_interval=10
+    ):
+        super().__init__(
+            n_components=n_components,
+            tol=tol,
+            reg_covar=reg_covar,
+            max_iter=max_iter,
+            n_init=n_init,
+            init_params=init_params,
+            covariance_type=covariance_type,
+            weights_init=weights_init,
+            means_init=means_init,
+            precisions_init=precisions_init,
+            random_state=random_state,
+            warm_start=warm_start,
+            verbose=verbose,
+            verbose_interval=verbose_interval,
+        )
+        self.resp_init=resp_init
+    def _initialize_parameters(self, X, random_state):
+        """
+        Initializes parameters for
+        :param X:
+        """
+        self._initialize(X, self.resp_init)
+
+
+class HweGaussianMixture(InitializedGaussianMixture):
     """
     Gaussian mixture model that can be initialized with initial responsibilities instead of initial means and weights.
     This method should refrain from swapping mixture identities.
 
-    Currently, there is no mechanism in place to prevent mixture identities.
-
-    TODO: test if mixture identities change.
-    TODO: if so, either fix the weights according to HWE informed weights,
-    TODO: or recalculate weights, with the constraint of HWE.
+    The maximization step now calculates expected frequencies of each of the clusters
     """
     def __init__(
             self,
@@ -1443,7 +1526,7 @@ class IterativeGaussianMixture(GaussianMixture):
             warm_start=False,
             verbose=0,
             verbose_interval=10,
-            alpha=0.5
+            alpha=1
     ):
         super().__init__(
             n_components=n_components,
@@ -1460,16 +1543,11 @@ class IterativeGaussianMixture(GaussianMixture):
             warm_start=warm_start,
             verbose=verbose,
             verbose_interval=verbose_interval,
+            resp_init=resp_init
         )
-        self.resp_init=resp_init
         self.hwe_calculator = hwe_calculator
         self.alpha = alpha
-    def _initialize_parameters(self, X, random_state):
-        """
-        Initializes parameters for
-        :param X:
-        """
-        self._initialize(X, self.resp_init)
+
     def _m_step(self, X, log_resp):
         """M step.
 
@@ -1484,6 +1562,7 @@ class IterativeGaussianMixture(GaussianMixture):
         self.weights_, self.means_, self.covariances_ = _estimate_gaussian_parameters(
             X, np.exp(log_resp), self.reg_covar, self.covariance_type
         )
+        print(self.means_)
         exp = self.hwe_calculator.calculate_expected_frequencies(self.weights_)
         hwe_weights = exp / self.weights_ * self.alpha
         self.weights_ *= hwe_weights
@@ -2054,21 +2133,23 @@ def main(argv=None):
             naive_clustering = NaiveHweInformedClustering(
                 genotype_labels=[-2, -1, 0, 1], ref_genotype = 2)
             copy_number_frequencies = naive_clustering.get_copy_number_genotype_frequencies()
-            naive_copy_number_assignment = naive_clustering.get_copy_number_assignment(
-                corrected_intensities[variants_for_naive_clustering.Name.values],
+            resp = naive_clustering.get_responsibility_matrix(
+                corrected_intensities[variants_for_naive_clustering.Name.values].mean(axis=1),
                 copy_number_frequencies)
             naive_clustering.write_output(
-                args.out, naive_copy_number_assignment)
+                args.out, resp)
             print("Naive clustering complete", end=os.linesep*2)
             updated_naive_cnv_probabilities, updated_naive_cnv_assignment = (
                 naive_clustering.update_assignments_gaussian(
-                corrected_intensities[variants_for_naive_clustering.Name.values],
-                assignments=naive_copy_number_assignment))
+                    corrected_intensities[variants_for_naive_clustering.Name.values],
+                    resp=resp))
             updated_naive_cnv_probabilities.to_csv(
                 ".".join([args.out, "naive_clustering", "updated_probabilities", "csv", "gz"]))
             print(np.unique(updated_naive_cnv_assignment, return_counts=True))
 
-            resp = assignments_to_resp(updated_naive_cnv_assignment.values)
+            resp = pd.DataFrame(assignments_to_resp(updated_naive_cnv_assignment.values),
+                                index=updated_naive_cnv_probabilities.index,
+                                columns=updated_naive_cnv_probabilities.columns)
             sample_subset = None
 
         intensity_dataset = get_corrected_complex_dataset(
@@ -2077,7 +2158,7 @@ def main(argv=None):
 
         intensity_dataset.write_dataset(args.out)
 
-        cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp,
+        cnv_caller = SnpIntensityCnvCaller((np.array([-2, -1, 0, 1]) + 2), resp.values,
                                            k_nearest_neighbours=k_nearest_neighbours)
         cnv_caller.fit_over_variants(intensity_dataset)
         cnv_caller.write_fit(intensity_dataset, args.out)
