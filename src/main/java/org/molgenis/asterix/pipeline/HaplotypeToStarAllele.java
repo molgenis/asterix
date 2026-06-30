@@ -18,6 +18,7 @@ import java.util.*;
 public class HaplotypeToStarAllele {
 
     private static final Double PROBABILITY_CUT_OFF = 0.97;
+    private static final String NA_ALLELE = "NA";
     private static String STAR_ALLELE_OUTPUT_DIR;
     private static String SNP_HAPLO_TABLE_DIR;
     private static HaplotypeReader HAPLOTYPE_READER;
@@ -110,12 +111,12 @@ public class HaplotypeToStarAllele {
                 addLowProbSnps(lowProbSnpsOn1, lowProbSnpsCombinations, sample, 1);
 
                 if (starAllele0 == null) {
-                    sample.getGenes().get(pgxGene.getName()).setAllele0(pgxGene.getWildType().getName());
+                    sample.getGenes().get(pgxGene.getName()).setAllele0(NA_ALLELE);
                     determineNaHaplotypes(nanUniqueCombinations, snpsOnHaplotype0, sample, 0);
                     naCount += 1;
                 }
                 if (starAllele1 == null) {
-                    sample.getGenes().get(pgxGene.getName()).setAllele1(pgxGene.getWildType().getName());
+                    sample.getGenes().get(pgxGene.getName()).setAllele1(NA_ALLELE);
                     determineNaHaplotypes(nanUniqueCombinations, snpsOnHaplotype1, sample, 1);
                     naCount += 1;
                 }
