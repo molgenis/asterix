@@ -52,6 +52,8 @@ public class HaplotypeToStarAllele {
             // Keys are the non wild-type snps, values are the samples that matches the set of snps without a translation
             Map<Set<Snp>, List<String>> nanUniqueCombinations = new HashMap<>();
             Map<Set<Snp>, List<SnpLog>> lowProbSnpsCombinations = new HashMap<>();
+            // Keys are the reliably detected variant snps, values are the affected sample haplotypes
+            Map<Set<Snp>, List<SnpLog>> detectedMutationsCombinations = new HashMap<>();
 
             PgxGene pgxGene = genes.get(key);
 
@@ -73,12 +75,16 @@ public class HaplotypeToStarAllele {
                 Set<Snp> lowProbSnpsOn0 = new HashSet<>();
                 Set<Snp> lowProbSnpsOn1 = new HashSet<>();
 
+                Set<Snp> detectedMutationsOn0 = new HashSet<>();
+                Set<Snp> detectedMutationsOn1 = new HashSet<>();
+
                 for (PgxHaplotype pgxHaplotype : pgxGene.getPgxHaplotypes().values()) {
                     if (pgxHaplotype.getSnps().isEmpty()) continue;
                     Set<Snp> snpsOnPgxHaploType = new HashSet<>(pgxHaplotype.getSnpsWithWildType().values());
 
                     if (snpsOnHaplotype0.equals(snpsOnPgxHaploType)) {
                         lowProbSnpsOn0.addAll(checkProbabilities(snpsOnHaplotype0, pgxHaplotype));
+                        detectedMutationsOn0.addAll(getDetectedMutations(snpsOnHaplotype0, pgxHaplotype));
                         if (starAllele0 != null) {
                             logWriter.write(sample.getId() + ": duplicate haplo 0 " + starAllele0 + " " +
                                     pgxHaplotype.getName() + "\n");
@@ -91,6 +97,7 @@ public class HaplotypeToStarAllele {
 
                     if (snpsOnHaplotype1.equals(snpsOnPgxHaploType)) {
                         lowProbSnpsOn1.addAll(checkProbabilities(snpsOnHaplotype1, pgxHaplotype));
+                        detectedMutationsOn1.addAll(getDetectedMutations(snpsOnHaplotype1, pgxHaplotype));
                         if (starAllele1 != null) {
                             logWriter.write(sample.getId() + ": duplicate haplo 1 " + starAllele1 + " " +
                                     pgxHaplotype.getName() + "\n");
@@ -106,8 +113,11 @@ public class HaplotypeToStarAllele {
                     }
                 }
 
-                addLowProbSnps(lowProbSnpsOn0, lowProbSnpsCombinations, sample, 0);
-                addLowProbSnps(lowProbSnpsOn1, lowProbSnpsCombinations, sample, 1);
+                addSnpCombination(lowProbSnpsOn0, lowProbSnpsCombinations, sample, 0);
+                addSnpCombination(lowProbSnpsOn1, lowProbSnpsCombinations, sample, 1);
+
+                addSnpCombination(detectedMutationsOn0, detectedMutationsCombinations, sample, 0);
+                addSnpCombination(detectedMutationsOn1, detectedMutationsCombinations, sample, 1);
 
                 if (starAllele0 == null) {
                     sample.getGenes().get(pgxGene.getName()).setAllele0(pgxGene.getWildType().getName());
@@ -126,6 +136,7 @@ public class HaplotypeToStarAllele {
 
             logNaHaplotype(logWriter, nanUniqueCombinations);
             logLowProbSnps(logWriter, lowProbSnpsCombinations);
+            logDetectedMutations(logWriter, detectedMutationsCombinations);
 
             if (pgxGene.getName().equals("CYP2D6")) {
                 new Cyp2d6Caller(samples, pgxGene);
@@ -222,17 +233,35 @@ public class HaplotypeToStarAllele {
         }
     }
 
-    private void addLowProbSnps(Set<Snp> lowProbSnps, Map<Set<Snp>, List<SnpLog>> lowProbSnpsCombinations,
-                                PgxSample sample, int haplotype) {
-        SnpLog snpLog = new SnpLog(lowProbSnps, sample, haplotype);
-        if (!lowProbSnps.isEmpty()) {
-            if (lowProbSnpsCombinations.containsKey(lowProbSnps)) {
-                List<SnpLog> snpLogs = lowProbSnpsCombinations.get(lowProbSnps);
+    /**
+     * Determines the variant snps that were reliably detected (probability at or above the cut-off) on a haplotype
+     * that matched a known star allele. These are the actual mutations underlying the star-allele call, as opposed to
+     * the low probability snps that get reverted to reference. Must be called after {@link #checkProbabilities}, so
+     * that low probability snps have already been reverted to reference and are excluded here.
+     */
+    private Set<Snp> getDetectedMutations(Set<Snp> snpsOnHaplotype, PgxHaplotype pgxHaplotype) {
+        Set<Snp> detectedMutations = new HashSet<>();
+        for (Snp snp : snpsOnHaplotype) {
+            if (pgxHaplotype.getSnps().containsKey(snp.getId()) &
+                    snp.getProbability() >= PROBABILITY_CUT_OFF &&
+                    !snp.getVariantAllele().equals(snp.getReferenceAllele())) {
+                detectedMutations.add(snp);
+            }
+        }
+        return detectedMutations;
+    }
+
+    private void addSnpCombination(Set<Snp> snps, Map<Set<Snp>, List<SnpLog>> snpCombinations,
+                                   PgxSample sample, int haplotype) {
+        SnpLog snpLog = new SnpLog(snps, sample, haplotype);
+        if (!snps.isEmpty()) {
+            if (snpCombinations.containsKey(snps)) {
+                List<SnpLog> snpLogs = snpCombinations.get(snps);
                 snpLogs.add(snpLog);
             } else {
                 List<SnpLog> snpLogs = new ArrayList<>();
                 snpLogs.add(snpLog);
-                lowProbSnpsCombinations.put(lowProbSnps, snpLogs);
+                snpCombinations.put(snps, snpLogs);
             }
         }
     }
@@ -261,6 +290,31 @@ public class HaplotypeToStarAllele {
             logWriter.write("\n");
         }
 
+    }
+
+    private void logDetectedMutations(BufferedWriter logWriter, Map<Set<Snp>, List<SnpLog>> detectedMutationsCombinations)
+            throws IOException {
+        TreeMap<Set<Snp>, List<SnpLog>> sorter = new TreeMap<>(new LogSizeComparator(detectedMutationsCombinations));
+        sorter.putAll(detectedMutationsCombinations);
+
+        for (Set<Snp> snps : sorter.keySet()) {
+            logWriter.write("\nSamples with detected mutation(s):\n");
+            for (Snp snp : snps) {
+                logWriter.write(snp.getId() + ", reference: " + snp.getReferenceAllele() + ", variant: " +
+                        snp.getVariantAllele() + ", R2: " + snp.getrSquared() + " " + snp.getType() + "\n");
+            }
+            List<SnpLog> snpLogs = detectedMutationsCombinations.get(snps);
+            Collections.sort(snpLogs);
+            logWriter.write(snpLogs.size() + " affected haplotype(s):\n");
+            for (SnpLog snpLog : snpLogs) {
+                logWriter.write(snpLog.getSample().getId() + "_hap_" + snpLog.getHaplotype());
+                for (Snp snp : snpLog.getSnps()) {
+                    logWriter.write(";" + snp.getId() + "_" + snp.getVariantAllele() + "_" + snp.getProbability());
+                }
+                logWriter.write(",");
+            }
+            logWriter.write("\n");
+        }
     }
 
     /**
