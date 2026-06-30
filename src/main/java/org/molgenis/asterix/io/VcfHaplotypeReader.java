@@ -13,7 +13,6 @@ import org.molgenis.genotype.annotation.Annotation;
 import org.molgenis.genotype.variant.GeneticVariant;
 import org.molgenis.genotype.vcf.VcfGenotypeData;
 import org.molgenis.genotype.vcf.VcfGenotypeField.VcfGenotypeFormat;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -104,7 +103,7 @@ public class VcfHaplotypeReader implements HaplotypeReader {
 
     @Override
     public void readHaplotypes() throws IOException {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override
