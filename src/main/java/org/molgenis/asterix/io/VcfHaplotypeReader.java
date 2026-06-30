@@ -181,26 +181,28 @@ public class VcfHaplotypeReader implements HaplotypeReader {
 
             double[][] sample = sampleGenotypeProbabilitiesPhased[i];
 
-            double probabilityReferenceAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX];
-            if (probabilityReferenceAlleleHaplotype0 > 0.5) {
-                Snp snp = referenceSnp.copySnp(referenceSnp);
-                snp.setProbability(probabilityReferenceAlleleHaplotype0);
+            // Assign the alternative (variant) allele only when it is positively called.
+            // Reference calls and missing calls (both probabilities ~0) default to the reference (wild-type) allele.
+            double probabilityAlternativeAlleleHaplotype0 = sample[HAPLOTYPE_0_INDEX][ALTERNATIVE_ALLELE_INDEX];
+            if (probabilityAlternativeAlleleHaplotype0 > 0.5) {
+                Snp snp = alternativeSnp.copySnp(alternativeSnp);
+                snp.setProbability(probabilityAlternativeAlleleHaplotype0);
                 currentSample.getHaplotype0().put(snp.getId(), snp);
             } else {
-                Snp snp = alternativeSnp.copySnp(alternativeSnp);
-                snp.setProbability(sample[HAPLOTYPE_0_INDEX][ALTERNATIVE_ALLELE_INDEX]);
+                Snp snp = referenceSnp.copySnp(referenceSnp);
+                snp.setProbability(sample[HAPLOTYPE_0_INDEX][REFERENCE_ALLELE_INDEX]);
                 currentSample.getHaplotype0().put(snp.getId(), snp);
             }
 
-            double probabilityReferenceAlleleHaplotype1 = sample[HAPLOTYPE_1_INDEX][REFERENCE_ALLELE_INDEX];
-            if (probabilityReferenceAlleleHaplotype1 > 0.5) {
-                Snp snp = referenceSnp.copySnp(referenceSnp);
-                snp.setProbability(probabilityReferenceAlleleHaplotype1);
+            double probabilityAlternativeAlleleHaplotype1 = sample[HAPLOTYPE_1_INDEX][ALTERNATIVE_ALLELE_INDEX];
+            if (probabilityAlternativeAlleleHaplotype1 > 0.5) {
+                Snp snp = alternativeSnp.copySnp(alternativeSnp);
+                snp.setProbability(probabilityAlternativeAlleleHaplotype1);
                 currentSample.getHaplotype1().put(snp.getId(), snp);
             } else {
-                Snp snp = alternativeSnp.copySnp(alternativeSnp);
-                snp.setProbability(sample[HAPLOTYPE_1_INDEX][ALTERNATIVE_ALLELE_INDEX]);
-                currentSample.getHaplotype1().put(alternativeSnp.getId(), snp);
+                Snp snp = referenceSnp.copySnp(referenceSnp);
+                snp.setProbability(sample[HAPLOTYPE_1_INDEX][REFERENCE_ALLELE_INDEX]);
+                currentSample.getHaplotype1().put(snp.getId(), snp);
             }
         }
     }
