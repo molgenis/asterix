@@ -13,7 +13,12 @@ public class PgxGene {
     private int endPos = 0;
 
     private String disclaimerGeneral;
-    private String disclaimerSubject;
+    // Kept as a set so overlapping decisions and translation tables cannot contribute the same
+    // disclaimer twice, while conflicting ones are all retained for the reviewer to see
+    private Set<String> disclaimerSubjects = new LinkedHashSet<>();
+
+    // Only set for CYP2D6, by the Cyp2d6Caller
+    private String cnvStatus;
 
     private Map<List<String>, String> functionToPredictedPhenotype = new HashMap<>();
 
@@ -132,19 +137,45 @@ public class PgxGene {
         this.disclaimerGeneral = disclaimerGeneral;
     }
 
+    /**
+     * @return the disclaimers that apply to this sample and gene, merged into one text, or null
+     * when there are none
+     */
     public String getDisclaimerSubject() {
-        return disclaimerSubject;
+        if (disclaimerSubjects.isEmpty()) return null;
+
+        StringBuilder merged = new StringBuilder();
+        for (String disclaimer : disclaimerSubjects) {
+            if (merged.length() > 0) merged.append("\n");
+            merged.append(disclaimer);
+        }
+        return merged.toString();
     }
 
+    /**
+     * @return the individual disclaimers, in the order they were added
+     */
+    public Set<String> getDisclaimerSubjects() {
+        return disclaimerSubjects;
+    }
+
+    /**
+     * Add a disclaimer for this sample and gene. Adding the same text twice is a no-op, so a
+     * disclaimer that reaches a sample over both haplotypes is only reported once.
+     */
     public void setDisclaimerSubject(String disclaimerSubject) {
-        if (disclaimerSubject != null) {
-            if (this.disclaimerSubject == null | disclaimerSubject.equals(this.disclaimerSubject)) {
-                this.disclaimerSubject = disclaimerSubject;
-            }
-            else {
-                this.disclaimerSubject += "\n" + disclaimerSubject;
-            }
-        }
+        if (disclaimerSubject == null) return;
+        String trimmed = disclaimerSubject.trim();
+        if (trimmed.isEmpty() || ".".equals(trimmed)) return;
+        disclaimerSubjects.add(trimmed);
+    }
+
+    public String getCnvStatus() {
+        return cnvStatus;
+    }
+
+    public void setCnvStatus(String cnvStatus) {
+        this.cnvStatus = cnvStatus;
     }
 
     public void setVariants(Map<String, Snp> variants) {
