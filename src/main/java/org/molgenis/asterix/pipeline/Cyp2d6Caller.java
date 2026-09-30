@@ -59,6 +59,9 @@ public class Cyp2d6Caller {
     private void procesSample(String sampleId, double[] probabilities) {
         PgxSample sample = samples.get(sampleId);
         String cnvStatus = cnvStatusFromProbabilities(sample, probabilities);
+        // The CNV status is part of the identity of a case in the approval registry: the same set
+        // of SNPs means something else on a deleted or duplicated gene
+        sample.getGenes().get("CYP2D6").setCnvStatus(cnvStatus);
     }
 
     private String cnvStatusFromProbabilities(PgxSample sample, double[] probabilities) {

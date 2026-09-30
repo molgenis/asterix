@@ -18,6 +18,11 @@ public class Pipeline {
     public void doPipeline() throws IOException {
         HaplotypeToStarAllele haplotypeToStarAllele = this.getStarAlleleFromHaploType();
         haplotypeToStarAllele.writeStarAlleles();
+        // Written before the phenotypes, so a run that fails later still leaves the reviewer the
+        // list of combinations that need a decision
+        haplotypeToStarAllele.writeApprovalDecisions();
+        // Diplotypes and contraindications are determined from the star alleles, so they are
+        // recalculated here from the calls the approval decisions produced
         StarAlleleToPhenotype starAlleleToPhenotype = getPhenotypeFromStarAllele(haplotypeToStarAllele);
         starAlleleToPhenotype.writePhenotypes(haplotypeToStarAllele);
         Hl7Writer hl7Writer = new Hl7Writer();

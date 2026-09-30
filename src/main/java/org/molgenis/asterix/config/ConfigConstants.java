@@ -51,6 +51,15 @@ public class ConfigConstants {
     protected static final String OPTION_SPLIT_SAMPLES_PP = "split_samples";
     protected static final String DEFAULT_SPLIT_SAMPLES_PP = "false";
 
+    //output file for the release/approval (vrijgifte) workbook with unknown SNP combinations
+    public static final String APPROVAL_OUTPUT_FILE = "APPROVAL_OUTPUT_FILE";
+    protected static final String OPTION_APPROVAL_OUTPUT_FILE = "approval_out";
+    protected static final String DEFAULT_APPROVAL_OUTPUT_FILE = "approval.xlsx";
+
+    //input file with the expert decisions made in a previously written approval workbook
+    public static final String APPROVAL_INPUT_FILE = "APPROVAL_INPUT_FILE";
+    protected static final String OPTION_APPROVAL_INPUT_FILE = "approval_in";
+
     //properties loading via external .properties file
     protected static final String OPTION_PROPERTIES_FILE = "properties";
 
